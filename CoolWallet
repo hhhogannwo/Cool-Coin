@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd -- "$(dirname -- "$0")" && pwd)"
+cd "$ROOT"
+
+export LD_LIBRARY_PATH="$ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$ROOT/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+
+"$ROOT/scripts/start-node.sh"
+
+exec "$ROOT/CoolWallet.real" "$@"

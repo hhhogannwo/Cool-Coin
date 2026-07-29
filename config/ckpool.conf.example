@@ -1,0 +1,17 @@
+{
+  "btcd": [
+    {
+      "url": "127.0.0.1:6463",
+      "auth": "GENERATED_AT_FIRST_LAUNCH",
+      "pass": "GENERATED_AT_FIRST_LAUNCH",
+      "notify": true
+    }
+  ],
+  "btcaddress": "GENERATED_WALLET_ADDRESS",
+  "serverurl": [
+    "127.0.0.1:3333"
+  ],
+  "mindiff": 1,
+  "startdiff": 1,
+  "logdir": "logs"
+}

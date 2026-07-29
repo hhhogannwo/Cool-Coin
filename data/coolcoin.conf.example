@@ -1,0 +1,17 @@
+server=1
+listen=1
+daemon=1
+txindex=1
+discover=1
+fallbackfee=0.00001000
+
+rpcbind=127.0.0.1
+rpcallowip=127.0.0.1
+rpcport=6463
+port=6464
+
+zmqpubhashblock=tcp://127.0.0.1:28332
+
+addnode=10.0.0.26:6464
+addnode=10.0.0.37:6464
+addnode=10.0.0.106:6464
