@@ -1,0 +1,40 @@
+name: Build CoolWallet for macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  macos-intel:
+    name: macOS Intel
+    runs-on: macos-15-intel
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install cmake ninja qt@5
+
+      - name: Build and package CoolWallet
+        run: |
+          chmod +x macos/scripts/build-macos.sh
+          macos/scripts/build-macos.sh
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoolWallet-macOS-Intel
+          path: dist/CoolWallet-macOS-Intel.zip
+          if-no-files-found: error
+
+      - name: Upload macOS checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoolWallet-macOS-Intel-SHA256
+          path: dist/SHA256SUMS-macOS-Intel.txt
+          if-no-files-found: error

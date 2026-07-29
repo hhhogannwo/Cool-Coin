@@ -1,34 +1,35 @@
-# Personal wallets and authentication
-data/wallets/
-data/wallet.dat
-data/.cookie
-data/coolcoin.conf
-config/ckpool.conf
 
-# Runtime node data
-data/.lock
-data/debug.log
-data/peers.dat
+*.backup*
+backup-before-*/
+# Backups
+*.bak*
+*.before-*
+/build-macos/
+config/ckpool.conf
 data/anchors.dat
 data/banlist.json
+data/.cookie
+data/coolcoin.conf
+data/debug.log
 data/fee_estimates.dat
+data/.lock
 data/mempool.dat
+data/peers.dat
 data/settings.json
-
-# Running processes and logs
-logs/
-runtime/
-run/
-*.pid
+data/wallet.dat
+data/wallets/
+/dist/
+.DS_Store
 *.log
-
-# Backups
-backup-before-*/
-*.before-*
-*.backup*
-*.bak*
-
+logs/
+# macOS GitHub Actions build output
 # Packages
+# Personal wallets and authentication
+*.pid
+run/
+# Running processes and logs
+runtime/
+# Runtime node data
 *.tar
 *.tar.gz
 *.zip
