@@ -26,6 +26,7 @@ fi
 ./configure \
   --disable-tests \
   --disable-bench \
+  --disable-fuzz-binary \
   --without-miniupnpc \
   --without-natpmp
 
