@@ -3,6 +3,8 @@ name: Build CoolWallet for Windows
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -45,8 +47,18 @@ jobs:
 
       - name: Build and package
         run: |
+          echo "GitHub workspace: $GITHUB_WORKSPACE"
+          cd "$(cygpath -u "$GITHUB_WORKSPACE")"
+
+          echo "Current directory:"
+          pwd
+
+          echo "Windows files:"
+          ls -la windows
+
+          test -f windows/build-windows.sh
           chmod +x windows/build-windows.sh
-          windows/build-windows.sh
+          bash windows/build-windows.sh
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
