@@ -1,0 +1,63 @@
+name: Build CoolWallet for Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  windows-x86_64:
+    runs-on: windows-2025
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install MSYS2 build tools
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            make
+            automake
+            autoconf
+            libtool
+            pkgconf
+            zip
+            file
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt5-base
+            mingw-w64-ucrt-x86_64-boost
+            mingw-w64-ucrt-x86_64-libevent
+            mingw-w64-ucrt-x86_64-miniupnpc
+            mingw-w64-ucrt-x86_64-zeromq
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-openssl
+
+      - name: Build and package
+        run: |
+          chmod +x windows/build-windows.sh
+          windows/build-windows.sh
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoolWallet-Windows-x86_64
+          path: dist/CoolWallet-Windows-x86_64.zip
+          if-no-files-found: error
+
+      - name: Upload checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoolWallet-Windows-SHA256
+          path: dist/SHA256SUMS-Windows.txt
+          if-no-files-found: error
