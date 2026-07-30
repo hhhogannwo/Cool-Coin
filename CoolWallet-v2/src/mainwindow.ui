@@ -1,0 +1,1511 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1728</width>
+    <height>1032</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>1280</width>
+    <height>800</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Cool Wallet</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">QWidget#centralwidget{background:#010811;color:#f0f7ff;font-family:"DejaVu Sans";font-size:12px;}
+QFrame{background:#03111d;border:1px solid #13567d;border-radius:7px;}
+QLabel{background:transparent;border:none;}
+QPushButton{color:#f0f7ff;background:#061522;border:1px solid #13567d;border-radius:5px;padding:6px 10px;font-size:12px;}
+QPushButton:hover{background:#0a2942;border-color:#18d6ff;}
+QProgressBar{color:white;background:#06121d;border:1px solid #13567d;border-radius:6px;text-align:center;}
+QProgressBar::chunk{background:#00e548;border-radius:5px;}</string>
+   </property>
+   <widget class="QLabel" name="topBanner">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>10</y>
+      <width>1683</width>
+      <height>171</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background:#000;border:none;</string>
+    </property>
+    <property name="pixmap">
+     <pixmap resource="../resources.qrc">:/CoolWallet-Top-Banner.png</pixmap>
+    </property>
+    <property name="scaledContents">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QFrame" name="sidebar">
+    <property name="geometry">
+     <rect>
+      <x>14</x>
+      <y>189</y>
+      <width>248</width>
+      <height>601</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="sidebarTitle">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>0</y>
+       <width>210</width>
+       <height>36</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:20px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>❄  CoolWallet</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QPushButton" name="overviewButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>228</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background:#0a73d9;font-weight:700;text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>⌂  Overview</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="sendNavButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>282</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>↗  Send Coins</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="receiveNavButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>336</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>↓  Receive Coins</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="miningButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>390</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>⚒  Mining</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="transactionHistoryButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>444</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>☷  Transaction History</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="addressBookButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>498</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>▣  Address Book</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="walletSecurityButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>552</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>◈  Wallet Security</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="settingsButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>606</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>⚙  Settings</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="helpButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>660</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>?  Help</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="aboutButton">
+    <property name="geometry">
+     <rect>
+      <x>22</x>
+      <y>714</y>
+      <width>232</width>
+      <height>46</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">text-align:left;</string>
+    </property>
+    <property name="text">
+     <string>ⓘ  About</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="balanceCard">
+    <property name="geometry">
+     <rect>
+      <x>257</x>
+      <y>189</y>
+      <width>401</width>
+      <height>201</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="balanceCardTitle">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>10</y>
+       <width>344</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>WALLET BALANCE</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="totalValue">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>40</y>
+       <width>335</width>
+       <height>44</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#00e548;font-size:25px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>0.00000000 COOL</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QLabel" name="availableValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>262</y>
+      <width>110</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Available:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="availableValue">
+    <property name="geometry">
+     <rect>
+      <x>412</x>
+      <y>262</y>
+      <width>225</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>0.00000000 COOL</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="pendingValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>296</y>
+      <width>110</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Pending:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="pendingValue">
+    <property name="geometry">
+     <rect>
+      <x>412</x>
+      <y>296</y>
+      <width>225</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>0.00000000 COOL</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="immatureValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>330</y>
+      <width>110</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Immature:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="immatureValue">
+    <property name="geometry">
+     <rect>
+      <x>412</x>
+      <y>330</y>
+      <width>225</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>0.00000000 COOL</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="sendButton">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>356</y>
+      <width>160</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background:#0a73d9;text-align:center;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>↑  Send</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="receiveButton">
+    <property name="geometry">
+     <rect>
+      <x>474</x>
+      <y>356</y>
+      <width>160</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background:#0a73d9;text-align:center;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>↓  Receive</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="syncCard">
+    <property name="geometry">
+     <rect>
+      <x>665</x>
+      <y>189</y>
+      <width>391</width>
+      <height>201</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="syncCardTitle">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>0</y>
+       <width>342</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>BLOCKCHAIN SYNC</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="syncBlocks">
+     <property name="geometry">
+      <rect>
+       <x>30</x>
+       <y>30</y>
+       <width>330</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#00e548;font-size:25px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>0 / 0</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QLabel" name="syncPercent">
+    <property name="geometry">
+     <rect>
+      <x>690</x>
+      <y>254</y>
+      <width>220</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>0.00%</string>
+    </property>
+   </widget>
+   <widget class="QProgressBar" name="progress">
+    <property name="geometry">
+     <rect>
+      <x>690</x>
+      <y>287</y>
+      <width>334</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="maximum">
+     <number>10000</number>
+    </property>
+    <property name="value">
+     <number>0</number>
+    </property>
+   </widget>
+   <widget class="QLabel" name="syncState">
+    <property name="geometry">
+     <rect>
+      <x>690</x>
+      <y>326</y>
+      <width>300</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>Synchronizing...</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="lastBlockAge">
+    <property name="geometry">
+     <rect>
+      <x>690</x>
+      <y>358</y>
+      <width>320</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;</string>
+    </property>
+    <property name="text">
+     <string>Last Block: --</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="networkCard">
+    <property name="geometry">
+     <rect>
+      <x>1063</x>
+      <y>189</y>
+      <width>640</width>
+      <height>201</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="networkCardTitle">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>10</y>
+       <width>590</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>NETWORK STATUS</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="peersValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>30</x>
+       <y>33</y>
+       <width>155</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:13px;</string>
+     </property>
+     <property name="text">
+      <string>Peers:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="peersValue">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>33</y>
+       <width>250</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="protocolValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>30</x>
+       <y>53</y>
+       <width>155</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:13px;</string>
+     </property>
+     <property name="text">
+      <string>Protocol:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="protocolValue">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>53</y>
+       <width>250</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QLabel" name="listenPortValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1078</x>
+      <y>270</y>
+      <width>155</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Listen Port:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="listenPortValue">
+    <property name="geometry">
+     <rect>
+      <x>1238</x>
+      <y>270</y>
+      <width>250</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>6464</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="rpcPortValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1078</x>
+      <y>294</y>
+      <width>155</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>RPC Port:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="rpcPortValue">
+    <property name="geometry">
+     <rect>
+      <x>1238</x>
+      <y>294</y>
+      <width>250</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>6463</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="difficultyValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1078</x>
+      <y>325</y>
+      <width>155</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Difficulty:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="difficultyValue">
+    <property name="geometry">
+     <rect>
+      <x>1238</x>
+      <y>325</y>
+      <width>250</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>--</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="networkValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1078</x>
+      <y>356</y>
+      <width>155</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Network:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="networkValue">
+    <property name="geometry">
+     <rect>
+      <x>1238</x>
+      <y>356</y>
+      <width>250</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>MainNet</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="txCard">
+    <property name="geometry">
+     <rect>
+      <x>257</x>
+      <y>397</y>
+      <width>401</width>
+      <height>386</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="txCardTitle">
+    <property name="geometry">
+     <rect>
+      <x>296</x>
+      <y>414</y>
+      <width>354</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>RECENT TRANSACTIONS</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="transactionsValue">
+    <property name="geometry">
+     <rect>
+      <x>299</x>
+      <y>446</y>
+      <width>351</width>
+      <height>315</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;</string>
+    </property>
+    <property name="text">
+     <string>No transactions found.</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+    </property>
+    <property name="wordWrap">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QFrame" name="hashrateCard">
+    <property name="geometry">
+     <rect>
+      <x>665</x>
+      <y>397</y>
+      <width>391</width>
+      <height>386</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="hashrateCardTitle">
+    <property name="geometry">
+     <rect>
+      <x>696</x>
+      <y>414</y>
+      <width>332</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>NETWORK HASHRATE</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="hashrateTitle">
+    <property name="geometry">
+     <rect>
+      <x>710</x>
+      <y>448</y>
+      <width>304</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>COOL CHAIN NETWORK</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="boltIcon">
+    <property name="geometry">
+     <rect>
+      <x>780</x>
+      <y>485</y>
+      <width>165</width>
+      <height>125</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-size:88px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>⚡</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="networkHashrateValue">
+    <property name="geometry">
+     <rect>
+      <x>710</x>
+      <y>616</y>
+      <width>304</width>
+      <height>55</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-size:34px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>0.000000</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="hashrateSubtitle">
+    <property name="geometry">
+     <rect>
+      <x>710</x>
+      <y>676</y>
+      <width>304</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:15px;</string>
+    </property>
+    <property name="text">
+     <string>Estimated Network Hashrate</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="hashrateLive">
+    <property name="geometry">
+     <rect>
+      <x>710</x>
+      <y>730</y>
+      <width>304</width>
+      <height>28</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>● Live — refreshes every 5 seconds</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QFrame" name="supplyCard">
+    <property name="geometry">
+     <rect>
+      <x>1063</x>
+      <y>397</y>
+      <width>640</width>
+      <height>170</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="supplyCardTitle">
+    <property name="geometry">
+     <rect>
+      <x>1083</x>
+      <y>407</y>
+      <width>590</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>COIN SUPPLY</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="circulatingSupplyValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1093</x>
+      <y>445</y>
+      <width>190</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Circulating Supply:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="circulatingSupplyValue">
+    <property name="geometry">
+     <rect>
+      <x>1283</x>
+      <y>445</y>
+      <width>300</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>0.00000000 COOL</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="totalSupplyValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1093</x>
+      <y>476</y>
+      <width>190</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Total Supply:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="totalSupplyValue">
+    <property name="geometry">
+     <rect>
+      <x>1283</x>
+      <y>476</y>
+      <width>300</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>64,000,000 COOL</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="blockRewardValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1093</x>
+      <y>507</y>
+      <width>190</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Block Reward:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="blockRewardValue">
+    <property name="geometry">
+     <rect>
+      <x>1283</x>
+      <y>507</y>
+      <width>300</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>64.00000000 COOL</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="nextHalvingValueCaption">
+    <property name="geometry">
+     <rect>
+      <x>1093</x>
+      <y>538</y>
+      <width>190</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:13px;</string>
+    </property>
+    <property name="text">
+     <string>Next Halving In:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="nextHalvingValue">
+    <property name="geometry">
+     <rect>
+      <x>1283</x>
+      <y>538</y>
+      <width>300</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:13px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>--</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="quickCard">
+    <property name="geometry">
+     <rect>
+      <x>1063</x>
+      <y>790</y>
+      <width>640</width>
+      <height>161</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="walletInfoCardTitle">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>10</y>
+       <width>590</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>WALLET INFORMATION</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="walletVersionValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>50</y>
+       <width>130</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;</string>
+     </property>
+     <property name="text">
+      <string>Wallet Version:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="walletVersionValue">
+     <property name="geometry">
+      <rect>
+       <x>120</x>
+       <y>50</y>
+       <width>185</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>169900</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="walletFormatValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>81</y>
+       <width>101</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;</string>
+     </property>
+     <property name="text">
+      <string>Format:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="walletFormatValue">
+     <property name="geometry">
+      <rect>
+       <x>124</x>
+       <y>81</y>
+       <width>181</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>SQLite</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QFrame" name="walletInfoCard">
+    <property name="geometry">
+     <rect>
+      <x>14</x>
+      <y>790</y>
+      <width>343</width>
+      <height>161</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="peerNetworkStatusValue">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>30</y>
+       <width>291</width>
+       <height>28</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+    QLabel {
+        color: #eaf7ff;
+        background: transparent;
+        border: none;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    </string>
+     </property>
+     <property name="text">
+      <string>Network: MainNet  |  Offline</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QFrame" name="miningCard">
+    <property name="geometry">
+     <rect>
+      <x>364</x>
+      <y>790</y>
+      <width>294</width>
+      <height>161</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="miningCardTitle">
+    <property name="geometry">
+     <rect>
+      <x>402</x>
+      <y>802</y>
+      <width>246</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>MINING STATUS</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="miningStateValue">
+    <property name="geometry">
+     <rect>
+      <x>402</x>
+      <y>834</y>
+      <width>120</width>
+      <height>26</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#00e548;font-size:16px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>⚒ READY</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="localHashrateCaption">
+    <property name="geometry">
+     <rect>
+      <x>402</x>
+      <y>872</y>
+      <width>120</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;</string>
+    </property>
+    <property name="text">
+     <string>Local Hashrate:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="localHashrateValue">
+    <property name="geometry">
+     <rect>
+      <x>525</x>
+      <y>872</y>
+      <width>120</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>0 H/s</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="poolCaption">
+    <property name="geometry">
+     <rect>
+      <x>402</x>
+      <y>905</y>
+      <width>115</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;</string>
+    </property>
+    <property name="text">
+     <string>Connected to:</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="poolValue">
+    <property name="geometry">
+     <rect>
+      <x>520</x>
+      <y>905</y>
+      <width>135</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#18d6ff;font-size:10px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>CKPool 127.0.0.1:3333</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="peersCard">
+    <property name="geometry">
+     <rect>
+      <x>665</x>
+      <y>790</y>
+      <width>391</width>
+      <height>161</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="peersCardTitle">
+    <property name="geometry">
+     <rect>
+      <x>694</x>
+      <y>802</y>
+      <width>264</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+    </property>
+    <property name="text">
+     <string>CONNECTED PEERS</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="connectedPeersValue">
+    <property name="geometry">
+     <rect>
+      <x>694</x>
+      <y>836</y>
+      <width>265</width>
+      <height>61</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color:#f0f7ff;</string>
+    </property>
+    <property name="text">
+     <string>No peers</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+    </property>
+    <property name="wordWrap">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QFrame" name="latestCard">
+    <property name="geometry">
+     <rect>
+      <x>1063</x>
+      <y>574</y>
+      <width>640</width>
+      <height>209</height>
+     </rect>
+    </property>
+    <widget class="QLabel" name="blockHeightValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>48</y>
+       <width>110</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;</string>
+     </property>
+     <property name="text">
+      <string>Height:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestCardTitle">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>10</y>
+       <width>590</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;font-size:14px;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>LATEST BLOCK</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="blockHeightValue">
+     <property name="geometry">
+      <rect>
+       <x>250</x>
+       <y>48</y>
+       <width>220</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestHashValue">
+     <property name="geometry">
+      <rect>
+       <x>205</x>
+       <y>78</y>
+       <width>410</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="cubeIcon">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>70</y>
+       <width>80</width>
+       <height>80</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-size:52px;</string>
+     </property>
+     <property name="text">
+      <string>◇</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestHashValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>78</y>
+       <width>110</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;</string>
+     </property>
+     <property name="text">
+      <string>Hash:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestTimeValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>108</y>
+       <width>110</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;</string>
+     </property>
+     <property name="text">
+      <string>Time:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestTimeValue">
+     <property name="geometry">
+      <rect>
+       <x>205</x>
+       <y>108</y>
+       <width>300</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestTxValueCaption">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>138</y>
+       <width>120</width>
+       <height>30</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#f0f7ff;</string>
+     </property>
+     <property name="text">
+      <string>Transactions:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="latestTxValue">
+     <property name="geometry">
+      <rect>
+       <x>250</x>
+       <y>138</y>
+       <width>300</width>
+       <height>30</height>
+      </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#18d6ff;font-weight:700;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+    </widget>
+   </widget>
+  </widget>
+ </widget>
+ <resources>
+  <include location="../resources.qrc" />
+ </resources>
+ <connections />
+</ui>
