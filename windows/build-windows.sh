@@ -33,11 +33,14 @@ LIBS="-lsodium" \
 
 make -j"$(nproc)"
 
-DAEMON="$(find "$ROOT" -type f -name 'coolcoind.exe' | head -n1 || true)"
-CLI="$(find "$ROOT" -type f -name 'coolcoin-cli.exe' | head -n1 || true)"
+DAEMON="$(find "$ROOT" -type f \( -name 'coolcoind.exe' -o -name 'bitcoind.exe' \) | head -n1 || true)"
+CLI="$(find "$ROOT" -type f \( -name 'coolcoin-cli.exe' -o -name 'bitcoin-cli.exe' \) | head -n1 || true)"
 
-[[ -f "$DAEMON" ]] || { echo "ERROR: coolcoind.exe not found"; exit 1; }
-[[ -f "$CLI" ]] || { echo "ERROR: coolcoin-cli.exe not found"; exit 1; }
+[[ -f "$DAEMON" ]] || { echo "ERROR: daemon executable not found"; exit 1; }
+[[ -f "$CLI" ]] || { echo "ERROR: CLI executable not found"; exit 1; }
+
+echo "Daemon source: $DAEMON"
+echo "CLI source: $CLI"
 
 cp -f "$DAEMON" "$STAGE/bin/coolcoind.exe"
 cp -f "$CLI" "$STAGE/bin/coolcoin-cli.exe"
