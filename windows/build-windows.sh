@@ -23,6 +23,7 @@ if [[ ! -x ./configure ]]; then
   exit 1
 fi
 
+LIBS="-lsodium" \
 ./configure \
   --disable-tests \
   --disable-bench \
