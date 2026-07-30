@@ -64,6 +64,16 @@ GUI="$(find "$GUI_BUILD" -type f -name 'CoolWallet.exe' | head -n1 || true)"
 cp -f "$GUI" "$STAGE/CoolWallet.exe"
 
 echo "== Deploying Qt runtime =="
+WINDEPLOYQT="$(command -v windeployqt-qt5.exe 2>/dev/null || true)"
+[[ -n "$WINDEPLOYQT" ]] || WINDEPLOYQT="$(command -v windeployqt.exe 2>/dev/null || true)"
+[[ -n "$WINDEPLOYQT" ]] || WINDEPLOYQT="/ucrt64/bin/windeployqt-qt5.exe"
+
+[[ -x "$WINDEPLOYQT" ]] || {
+  echo "ERROR: Qt deployment tool not found"
+  find /ucrt64/bin -maxdepth 1 -iname '*deployqt*' -print || true
+  exit 1
+}
+
 
 WDEPLOYQT="/ucrt64/bin/windeployqt.exe"
 [[ -x "$WDEPLOYQT" ]] || { echo "ERROR: windeployqt.exe not found"; exit 1; }
