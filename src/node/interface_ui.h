@@ -7,6 +7,7 @@
 #define BITCOIN_NODE_INTERFACE_UI_H
 
 #include <functional>
+#include <cstdint>
 #include <memory>
 #include <string>
 
