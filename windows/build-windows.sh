@@ -74,7 +74,7 @@ WINDEPLOYQT="$(command -v windeployqt-qt5.exe 2>/dev/null || true)"
   exit 1
 }
 
-
+"$WINDEPLOYQT" \
   --release \
   --no-translations \
   --compiler-runtime \
