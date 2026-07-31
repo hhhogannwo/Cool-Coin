@@ -63,6 +63,21 @@ GUI="$(find "$GUI_BUILD" -type f -name 'CoolWallet.exe' | head -n1 || true)"
 
 cp -f "$GUI" "$STAGE/CoolWallet.exe"
 
+echo "== Installing Qt ANGLE runtime =="
+pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-angleproject
+
+test -f /ucrt64/bin/libGLESv2.dll || {
+  echo "ERROR: /ucrt64/bin/libGLESv2.dll is still missing"
+  exit 1
+}
+
+test -f /ucrt64/bin/libEGL.dll || {
+  echo "ERROR: /ucrt64/bin/libEGL.dll is still missing"
+  exit 1
+}
+
+ls -lh /ucrt64/bin/libGLESv2.dll /ucrt64/bin/libEGL.dll
+
 echo "== Deploying Qt runtime =="
 WINDEPLOYQT="$(command -v windeployqt-qt5.exe 2>/dev/null || true)"
 [[ -n "$WINDEPLOYQT" ]] || WINDEPLOYQT="$(command -v windeployqt.exe 2>/dev/null || true)"
