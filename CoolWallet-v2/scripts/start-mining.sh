@@ -51,7 +51,7 @@ sleep 3
 
 nohup "$MINER" \
     -a sha256d \
-    -o stratum+tcp://127.0.0.1:3333 \
+    -o stratum+tcp://127.0.0.1:3334 \
     -u coolwallet \
     -p x \
     > "$ROOT/logs/minerd.log" 2>&1 &
