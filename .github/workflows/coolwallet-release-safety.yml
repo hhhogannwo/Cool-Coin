@@ -1,0 +1,46 @@
+name: CoolWallet Release Safety
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "CoolWallet-v2/scripts/**"
+      - ".github/workflows/coolwallet-release-safety.yml"
+  pull_request:
+    paths:
+      - "CoolWallet-v2/scripts/**"
+      - ".github/workflows/coolwallet-release-safety.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mining-script-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          bash -n CoolWallet-v2/scripts/start-mining.sh
+          bash -n CoolWallet-v2/scripts/stop-mining.sh
+
+      - name: Run ShellCheck
+        run: |
+          shellcheck CoolWallet-v2/scripts/start-mining.sh
+          shellcheck CoolWallet-v2/scripts/stop-mining.sh
+
+      - name: Verify matching local Stratum port
+        run: |
+          grep -q 'CKPOOL_PORT=3334' CoolWallet-v2/scripts/start-mining.sh
+          grep -q '127\\.0\\.0\\.1:3334' CoolWallet-v2/scripts/stop-mining.sh
+
+      - name: Verify generated CKPool configuration safeguards
+        run: |
+          grep -q 'read_conf_value rpcuser' CoolWallet-v2/scripts/start-mining.sh
+          grep -q 'read_conf_value rpcpassword' CoolWallet-v2/scripts/start-mining.sh
+          grep -q 'chmod 600' CoolWallet-v2/scripts/start-mining.sh
+          grep -q 'COOLCOIN_MINING_ADDRESS' CoolWallet-v2/scripts/start-mining.sh
