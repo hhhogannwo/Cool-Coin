@@ -11,7 +11,7 @@ CKPOOL="$BIN/ckpool"
 MINER="$BIN/minerd"
 CONF="$DATA/coolcoin.conf"
 CKCONF="$CONFIG/ckpool.conf"
-CKPOOL_PORT=3334
+CKPOOL_PORT=3333
 
 mkdir -p "$DATA" "$CONFIG" "$ROOT/logs" "$ROOT/runtime"
 
