@@ -33,10 +33,10 @@ jobs:
           shellcheck CoolWallet-v2/scripts/start-mining.sh
           shellcheck CoolWallet-v2/scripts/stop-mining.sh
 
-      - name: Verify matching local Stratum port
+      - name: Verify matching pool port
         run: |
-          grep -q 'CKPOOL_PORT=3334' CoolWallet-v2/scripts/start-mining.sh
-          grep -q '127\\.0\\.0\\.1:3334' CoolWallet-v2/scripts/stop-mining.sh
+          grep -q 'CKPOOL_PORT=3333' CoolWallet-v2/scripts/start-mining.sh
+          grep -q '127\\.0\\.0\\.1:3333' CoolWallet-v2/scripts/stop-mining.sh
 
       - name: Verify generated CKPool configuration safeguards
         run: |
