@@ -25,7 +25,7 @@ stop_process "miner" "$RUNTIME/minerd.pid"
 stop_process "CKPool" "$RUNTIME/ckpool.pid"
 
 # Clean up older portable-wallet processes that predate PID tracking.
-pkill -f 'minerd.*127\.0\.0\.1:3334' 2>/dev/null || true
+pkill -f 'minerd.*127\.0\.0\.1:3333' 2>/dev/null || true
 pkill -f 'ckpool.*ckpool\.conf' 2>/dev/null || true
 
 echo "Cool Coin mining stopped."
