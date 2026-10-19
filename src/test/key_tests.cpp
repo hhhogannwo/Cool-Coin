@@ -632,6 +632,25 @@ BOOST_AUTO_TEST_CASE(hybrid_p2wpkh_owner_proof)
     uint256 wrong_digest = digest;
     wrong_digest.begin()[0] ^= 1;
     BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub, wrong_digest, signature));
+    // The signature binds chain, outpoint, amount, height and nonce.
+    uint256 foreign_genesis = genesis;
+    foreign_genesis.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(foreign_genesis, pub, txid, 0, deposit.nValue, 50000, nonce), signature));
+    uint256 different_txid = txid;
+    different_txid.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, different_txid, 0, deposit.nValue, 50000, nonce), signature));
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 1, deposit.nValue, 50000, nonce), signature));
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 0, deposit.nValue + 1, 50000, nonce), signature));
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 0, deposit.nValue, 50001, nonce), signature));
+    uint256 another_nonce = nonce;
+    another_nonce.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 0, deposit.nValue, 50000, another_nonce), signature));
     CTxOut wrong_script = deposit;
     wrong_script.scriptPubKey = CScript() << OP_TRUE;
     BOOST_CHECK(!VerifyP2WPKHRegistration(wrong_script, pub, digest, signature));
