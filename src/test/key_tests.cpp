@@ -505,6 +505,25 @@ BOOST_AUTO_TEST_CASE(hybrid_utxo_inspection)
     auto age_one = InspectStakeOutpoint(cache, stake, 100);
     BOOST_CHECK_EQUAL(age_one.confirmations, 1U);
 
+    // Provably unspendable outputs, empty scripts and insufficient value
+    // must never be interpreted as eligible staking deposits.
+    uint256 bad_txid = txid;
+    bad_txid.begin()[0] = 52;
+    COutPoint bad_outpoint{Txid::FromUint256(bad_txid), 0};
+    CTxOut bad_output;
+    bad_output.nValue = 2000 * COIN;
+    bad_output.scriptPubKey = CScript() << OP_RETURN;
+    cache.AddCoin(bad_outpoint, Coin(std::move(bad_output), 101, false), false);
+    BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{bad_txid, 0}, 200).unspent);
+
+    bad_txid.begin()[0] = 53;
+    bad_outpoint = COutPoint{Txid::FromUint256(bad_txid), 0};
+    CTxOut low_output;
+    low_output.nValue = MINIMUM_STAKE - 1;
+    low_output.scriptPubKey = CScript() << OP_TRUE;
+    cache.AddCoin(bad_outpoint, Coin(std::move(low_output), 101, false), false);
+    BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{bad_txid, 0}, 200).unspent);
+
     cache.SpendCoin(outpoint);
     auto spent = InspectStakeOutpoint(cache, stake, 200);
     BOOST_CHECK(!spent.unspent);
