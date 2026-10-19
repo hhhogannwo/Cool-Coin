@@ -101,6 +101,7 @@ public:
     {
         return claimed_.count(outpoint) != 0;
     }
+    const std::map<std::string, StakeStateRecord>& Records() const { return records_; }
     const uint256& Tip() const { return tip_; }
 
 private:
