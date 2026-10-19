@@ -8,6 +8,7 @@
 #include <consensus/hybrid_utxo.h>
 #include <consensus/hybrid_spend_guard.h>
 #include <consensus/hybrid_lifecycle.h>
+#include <consensus/hybrid_owner_proof.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -600,6 +601,40 @@ BOOST_AUTO_TEST_CASE(hybrid_bond_lifecycle)
     BOOST_CHECK(!lifecycle.Withdraw("A", 300));
     BOOST_CHECK(lifecycle.Bond("B", bond, 300, 100));
     BOOST_CHECK(!lifecycle.Bond("C", StakeOutpoint{txid, 2}, UINT32_MAX, 1));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_p2wpkh_owner_proof)
+{
+    using namespace Consensus::Hybrid;
+    CKey owner;
+    owner.MakeNewKey(true);
+    const CPubKey pub = owner.GetPubKey();
+    const uint160 keyhash = Hash160(pub);
+    CTxOut deposit;
+    deposit.nValue = 2000 * COIN;
+    deposit.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(keyhash.begin(), keyhash.end());
+    uint256 genesis;
+    genesis.begin()[0] = 1;
+    uint256 txid;
+    txid.begin()[0] = 2;
+    uint256 nonce;
+    nonce.begin()[0] = 3;
+    const uint256 digest = RegistrationDigest(genesis, pub, txid, 0, deposit.nValue, 50000, nonce);
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(owner.Sign(digest, signature));
+    BOOST_CHECK(VerifyP2WPKHRegistration(deposit, pub, digest, signature));
+
+    CKey attacker;
+    attacker.MakeNewKey(true);
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, attacker.GetPubKey(), digest, signature));
+    uint256 wrong_digest = digest;
+    wrong_digest.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub, wrong_digest, signature));
+    CTxOut wrong_script = deposit;
+    wrong_script.scriptPubKey = CScript() << OP_TRUE;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(wrong_script, pub, digest, signature));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
