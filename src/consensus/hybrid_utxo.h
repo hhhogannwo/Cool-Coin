@@ -26,6 +26,8 @@ inline ValidatedStakeEvidence InspectStakeOutpoint(const CCoinsView& view,
     Coin coin;
     if (!view.GetCoin(chain_outpoint, coin) || coin.IsSpent()) return result;
     if (coin.nHeight > tip_height) return result; // fail closed on inconsistent view
+    if (!MoneyRange(coin.out.nValue) || coin.out.nValue < MINIMUM_STAKE) return result;
+    if (coin.out.scriptPubKey.empty() || coin.out.scriptPubKey.IsUnspendable()) return result;
     result.amount = coin.out.nValue;
     result.confirmations = tip_height - coin.nHeight + 1;
     result.unspent = true;
