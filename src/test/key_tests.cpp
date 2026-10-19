@@ -990,4 +990,34 @@ BOOST_AUTO_TEST_CASE(hybrid_height_spend_guard)
     BOOST_REQUIRE(ledger.Disconnect(bond_undo) == false); // Not the current tip.
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_block_spend_guard)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint256 stake_id; stake_id.begin()[0] = 111;
+    uint256 other_id; other_id.begin()[0] = 112;
+    const StakeOutpoint stake{stake_id, 0};
+    const StakeOutpoint other{other_id, 1};
+    CMutableTransaction spend;
+    spend.vin.emplace_back(COutPoint{Txid::FromUint256(stake_id), 0});
+    const std::vector<CTransactionRef> transactions{MakeTransactionRef(spend)};
+    BOOST_CHECK(!BlockSpendsBondedStake(transactions, {}, ledger));
+    BOOST_CHECK(BlockSpendsBondedStake(transactions,
+        {{StakeEventType::BOND, "A", stake}}, ledger));
+    BOOST_CHECK(!BlockSpendsBondedStake(transactions,
+        {{StakeEventType::BOND, "B", other}}, ledger));
+    BOOST_CHECK(BlockSpendsBondedStake({CTransactionRef{}}, {}, ledger));
+
+    uint256 block; block.begin()[0] = 113;
+    HeightBlockUndo undo;
+    BOOST_REQUIRE(ledger.Apply(uint256{}, block, 100,
+        {{StakeEventType::BOND, "A", stake}}, undo));
+    BOOST_CHECK(BlockSpendsBondedStake(transactions, {}, ledger));
+    BOOST_CHECK(BlockSpendsBondedStake(transactions,
+        {{StakeEventType::WITHDRAW, "A", stake}}, ledger));
+    BOOST_REQUIRE(ledger.Disconnect(undo));
+    BOOST_CHECK(!BlockSpendsBondedStake(transactions, {}, ledger));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
