@@ -8,6 +8,7 @@
 
 #include <coins.h>
 #include <consensus/hybrid_admission.h>
+#include <consensus/consensus.h>
 #include <primitives/transaction.h>
 
 #include <cstdint>
@@ -28,6 +29,8 @@ inline ValidatedStakeEvidence InspectStakeOutpoint(const CCoinsView& view,
     if (coin.nHeight > tip_height) return result; // fail closed on inconsistent view
     if (!MoneyRange(coin.out.nValue) || coin.out.nValue < MINIMUM_STAKE) return result;
     if (coin.out.scriptPubKey.empty() || coin.out.scriptPubKey.IsUnspendable()) return result;
+    // Coinbase funds must mature before any staking eligibility assessment.
+    if (coin.IsCoinBase() && tip_height - coin.nHeight + 1 < COINBASE_MATURITY) return result;
     result.amount = coin.out.nValue;
     result.confirmations = tip_height - coin.nHeight + 1;
     result.unspent = true;
