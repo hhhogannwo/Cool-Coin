@@ -99,7 +99,18 @@ public:
 
     bool Disconnect(const HeightBlockUndo& undo)
     {
-        if (tip_ != undo.block) return false;
+        // Prototype only: undo records must be supplied by trusted chainstate.
+        // Check structural consistency before applying caller-supplied undo.
+        if (tip_ != undo.block || undo.block.IsNull() ||
+            undo.previous_tip == undo.block ||
+            (undo.previous_initialized &&
+             (last_height_ == 0 || undo.previous_height != last_height_ - 1)) ||
+            (!undo.previous_initialized && !undo.previous_tip.IsNull())) return false;
+        std::set<StakeOutpoint> derived;
+        for (const auto& [id, record] : undo.previous_bonds) {
+            if (id.empty() || !derived.insert(record.outpoint).second) return false;
+        }
+        if (derived != undo.previous_claims) return false;
         bonds_ = undo.previous_bonds;
         claims_ = undo.previous_claims;
         tip_ = undo.previous_tip;
