@@ -11,6 +11,7 @@
 namespace Consensus::Hybrid {
 
 // Heights are consensus candidate parameters, NOT settled network rules.
+inline constexpr uint32_t PROPOSED_UNBONDING_BLOCKS = 144;
 enum class BondPhase { PENDING, BONDED, EXIT_PENDING };
 struct BondRecord {
     StakeOutpoint outpoint;
@@ -46,6 +47,7 @@ public:
     {
         auto it = bonds_.find(id);
         if (it == bonds_.end() || it->second.phase != BondPhase::BONDED ||
+            unbond_delay < PROPOSED_UNBONDING_BLOCKS ||
             height > UINT32_MAX - unbond_delay) return false;
         it->second.phase = BondPhase::EXIT_PENDING;
         it->second.withdraw_height = height + unbond_delay;
