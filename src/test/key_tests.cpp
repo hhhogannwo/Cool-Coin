@@ -1092,7 +1092,9 @@ BOOST_AUTO_TEST_CASE(hybrid_transaction_intent_scan)
     BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
     mtx.vout[0].nValue = 0;
     const CScript valid = mtx.vout[0].scriptPubKey;
-    mtx.vout[0].scriptPubKey = valid << OP_TRUE;
+    CScript with_trailing_opcode = valid;
+    with_trailing_opcode << OP_TRUE;
+    mtx.vout[0].scriptPubKey = with_trailing_opcode;
     BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
 
     mtx.vout[0].scriptPubKey = CScript() << OP_RETURN <<
