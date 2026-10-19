@@ -12,6 +12,7 @@
 #include <consensus/hybrid_state_undo.h>
 #include <consensus/hybrid_replay.h>
 #include <consensus/hybrid_state_commitment.h>
+#include <consensus/hybrid_height_ledger.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -821,6 +822,67 @@ BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
     BOOST_CHECK(StakeStateCommitment(rebuilt.Records()) == StakeStateCommitment(state.Records()));
     BOOST_CHECK(rebuilt.IsBonded("Alice") == state.IsBonded("Alice"));
     BOOST_CHECK(rebuilt.IsBonded("Bob") == state.IsBonded("Bob"));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint256 txid; txid.begin()[0] = 81;
+    const StakeOutpoint stake{txid, 0};
+    uint256 current; current.begin()[0] = 10;
+    HeightBlockUndo bond_undo;
+    BOOST_REQUIRE(ledger.Apply(uint256{}, current, 100,
+        {{StakeEventType::BOND, "A", stake}}, bond_undo));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(!ledger.IsBonded("A"));
+    BOOST_CHECK(!ledger.Apply(current, txid, 102, {}, bond_undo));
+    BOOST_CHECK(ledger.Tip() == current);
+
+    uint256 next;
+    for (uint32_t height = 101; height <= 200; ++height) {
+        next.SetNull();
+        next.begin()[0] = 11;
+        next.begin()[1] = static_cast<unsigned char>(height);
+        HeightBlockUndo undo;
+        BOOST_REQUIRE(ledger.Apply(current, next, height, {}, undo));
+        current = next;
+        BOOST_CHECK(ledger.IsBonded("A") == (height >= 200));
+    }
+    uint256 exit_block; exit_block.begin()[0] = 12;
+    HeightBlockUndo exit_undo;
+    BOOST_REQUIRE(ledger.Apply(current, exit_block, 201,
+        {{StakeEventType::EXIT, "A", stake}}, exit_undo));
+    BOOST_CHECK(!ledger.IsBonded("A"));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(!ledger.CanWithdraw("A", 344));
+    BOOST_CHECK(ledger.CanWithdraw("A", 345));
+    uint256 invalid; invalid.begin()[0] = 13;
+    HeightBlockUndo withdrawal_undo;
+    BOOST_CHECK(!ledger.Apply(exit_block, invalid, 202,
+        {{StakeEventType::WITHDRAW, "A", stake}}, withdrawal_undo));
+    BOOST_CHECK(ledger.Tip() == exit_block);
+    BOOST_CHECK(ledger.IsLocked(stake));
+
+    // Reaching the withdrawal height must be represented by contiguous blocks.
+    current = exit_block;
+    for (uint32_t height = 202; height <= 344; ++height) {
+        next.SetNull();
+        next.begin()[0] = 14;
+        next.begin()[1] = static_cast<unsigned char>(height);
+        HeightBlockUndo undo;
+        BOOST_REQUIRE(ledger.Apply(current, next, height, {}, undo));
+        current = next;
+    }
+    uint256 final_block; final_block.begin()[0] = 15;
+    HeightBlockUndo final_undo;
+    BOOST_REQUIRE(ledger.Apply(current, final_block, 345,
+        {{StakeEventType::WITHDRAW, "A", stake}}, final_undo));
+    BOOST_CHECK(!ledger.IsLocked(stake));
+    BOOST_REQUIRE(ledger.Disconnect(final_undo));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(ledger.Tip() == current);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
