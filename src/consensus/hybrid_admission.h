@@ -22,6 +22,10 @@ namespace Consensus::Hybrid {
 struct StakeOutpoint {
     uint256 txid;
     uint32_t vout{0};
+    bool operator==(const StakeOutpoint& other) const
+    {
+        return txid == other.txid && vout == other.vout;
+    }
     bool operator<(const StakeOutpoint& other) const
     {
         return txid < other.txid || (txid == other.txid && vout < other.vout);
