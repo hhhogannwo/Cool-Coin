@@ -864,6 +864,9 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
         {{StakeEventType::WITHDRAW, "A", stake}}, withdrawal_undo));
     BOOST_CHECK(ledger.Tip() == exit_block);
     BOOST_CHECK(ledger.IsLocked(stake));
+    // Invalid attempts must not poison the next valid block.
+    BOOST_CHECK(!ledger.Apply(exit_block, invalid, 202,
+        {{StakeEventType::BOND, "B", stake}}, withdrawal_undo));
 
     // Reaching the withdrawal height must be represented by contiguous blocks.
     current = exit_block;
