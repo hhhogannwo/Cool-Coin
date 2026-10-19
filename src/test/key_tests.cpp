@@ -953,4 +953,41 @@ BOOST_AUTO_TEST_CASE(hybrid_height_replay_atomicity)
     BOOST_CHECK(state.Tip() == last);
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_height_spend_guard)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint256 txid; txid.begin()[0] = 104;
+    const StakeOutpoint stake{txid, 1};
+    uint256 a; a.begin()[0] = 105;
+    HeightBlockUndo bond_undo;
+    BOOST_REQUIRE(ledger.Apply(uint256{}, a, 100,
+        {{StakeEventType::BOND, "A", stake}}, bond_undo));
+
+    CMutableTransaction spending;
+    spending.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 0});
+    BOOST_CHECK(!SpendsHeightLockedStake(CTransaction(spending), ledger));
+    spending.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 1});
+    BOOST_CHECK(SpendsHeightLockedStake(CTransaction(spending), ledger));
+
+    uint256 parent = a;
+    for (uint32_t height = 101; height <= 200; ++height) {
+        uint256 block;
+        block.begin()[0] = 106;
+        block.begin()[1] = static_cast<unsigned char>(height);
+        HeightBlockUndo undo;
+        BOOST_REQUIRE(ledger.Apply(parent, block, height, {}, undo));
+        parent = block;
+    }
+    uint256 exit; exit.begin()[0] = 107;
+    HeightBlockUndo exit_undo;
+    BOOST_REQUIRE(ledger.Apply(parent, exit, 201,
+        {{StakeEventType::EXIT, "A", stake}}, exit_undo));
+    BOOST_CHECK(SpendsHeightLockedStake(CTransaction(spending), ledger));
+    BOOST_REQUIRE(ledger.Disconnect(exit_undo));
+    BOOST_CHECK(SpendsHeightLockedStake(CTransaction(spending), ledger));
+    BOOST_REQUIRE(ledger.Disconnect(bond_undo) == false); // Not the current tip.
+}
+
 BOOST_AUTO_TEST_SUITE_END()
