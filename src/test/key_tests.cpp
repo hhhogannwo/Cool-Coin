@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
+#include <consensus/hybrid_auth.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -362,6 +363,55 @@ BOOST_AUTO_TEST_CASE(key_ellswift)
         }
         BOOST_CHECK(key.GetPubKey() == decoded_pubkey);
     }
+}
+
+
+// Development-only hybrid PoS authentication checks. Uses ephemeral keys,
+// not the legacy Bitcoin-format WIF fixtures or any wallet secrets.
+BOOST_AUTO_TEST_CASE(hybrid_validator_authentication)
+{
+    CKey signer;
+    signer.MakeNewKey(true);
+    CKey impostor;
+    impostor.MakeNewKey(true);
+    const CPubKey validator_key = signer.GetPubKey();
+    const CPubKey wrong_key = impostor.GetPubKey();
+
+    uint256 genesis;
+    genesis.begin()[0] = 0x42;
+    uint256 stake_txid;
+    stake_txid.begin()[0] = 0x24;
+    uint256 nonce;
+    nonce.begin()[0] = 0x11;
+
+    const CAmount amount = 1000 * COIN;
+    const uint256 digest = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 0, amount, 50000, nonce);
+
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(signer.Sign(digest, signature));
+    BOOST_REQUIRE(!signature.empty());
+    BOOST_CHECK(Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, digest, signature));
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(wrong_key, digest, signature));
+
+    // Each changed field must alter the signed digest, invalidating the proof.
+    const auto altered_amount = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 0, amount + COIN, 50000, nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_amount, signature));
+    const auto altered_vout = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 1, amount, 50000, nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_vout, signature));
+    uint256 next_nonce = nonce;
+    next_nonce.begin()[0] ^= 1;
+    const auto altered_nonce = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 0, amount, 50000, next_nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_nonce, signature));
+    const auto altered_chain = Consensus::Hybrid::RegistrationDigest(
+        uint256{}, validator_key, stake_txid, 0, amount, 50000, nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_chain, signature));
+
+    signature[signature.size() / 2] ^= 1;
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, digest, signature));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
