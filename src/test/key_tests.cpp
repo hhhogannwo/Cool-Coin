@@ -582,11 +582,16 @@ BOOST_AUTO_TEST_CASE(hybrid_bond_lifecycle)
     BOOST_CHECK(lifecycle.IsLocked(bond));
     BOOST_CHECK(!lifecycle.IsEligible("A"));
     BOOST_CHECK(!lifecycle.Bond("B", bond, 100, 100));
+    BOOST_CHECK(!lifecycle.Withdraw("A", 200));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 190, 50));
+    BOOST_CHECK(!lifecycle.Bond("A", StakeOutpoint{txid, 2}, 120, 100));
     BOOST_CHECK(!lifecycle.Activate("A", 199));
     BOOST_CHECK(lifecycle.Activate("A", 200));
     BOOST_CHECK(lifecycle.IsEligible("A"));
     BOOST_CHECK(!lifecycle.RequestExit("A", 200, UINT32_MAX));
     BOOST_CHECK(lifecycle.RequestExit("A", 201, 50));
+    BOOST_CHECK(!lifecycle.Activate("A", 300));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 202, 50));
     BOOST_CHECK(!lifecycle.IsEligible("A"));
     BOOST_CHECK(lifecycle.IsLocked(bond));
     BOOST_CHECK(!lifecycle.Withdraw("A", 250));
