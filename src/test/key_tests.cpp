@@ -10,6 +10,7 @@
 #include <consensus/hybrid_lifecycle.h>
 #include <consensus/hybrid_owner_proof.h>
 #include <consensus/hybrid_state_undo.h>
+#include <consensus/hybrid_replay.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -697,6 +698,37 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_block_undo)
     BOOST_CHECK(!state.IsBonded("A"));
     BOOST_CHECK(!state.IsClaimed(stake));
     BOOST_CHECK(state.Tip().IsNull());
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_replay)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid; txid.begin()[0] = 55;
+    const StakeOutpoint stake{txid, 0};
+    uint256 a; a.begin()[0] = 11;
+    uint256 b; b.begin()[0] = 12;
+    uint256 c; c.begin()[0] = 13;
+    const std::vector<StakeReplayBlock> history{
+        {uint256{}, a, {{StakeEventType::BOND, "A", stake}}},
+        {a, b, {{StakeEventType::EXIT, "A", stake}}},
+        {b, c, {{StakeEventType::WITHDRAW, "A", stake}}}
+    };
+    StakeStateUndoPrototype before_restart;
+    BOOST_REQUIRE(ReplayStakeBlocks(history, before_restart));
+    BOOST_CHECK(before_restart.Tip() == c);
+    BOOST_CHECK(!before_restart.IsClaimed(stake));
+    StakeStateUndoPrototype reconstructed;
+    BOOST_REQUIRE(ReplayStakeBlocks(history, reconstructed));
+    BOOST_CHECK(reconstructed.Tip() == before_restart.Tip());
+    BOOST_CHECK(!reconstructed.IsClaimed(stake));
+    const std::vector<StakeReplayBlock> bad_history{
+        {uint256{}, a, {{StakeEventType::BOND, "A", stake}}},
+        {c, b, {{StakeEventType::EXIT, "A", stake}}}
+    };
+    BOOST_CHECK(!ReplayStakeBlocks(bad_history, reconstructed));
+    BOOST_CHECK(reconstructed.Tip() == c);
+    BOOST_CHECK(!reconstructed.IsClaimed(stake));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
