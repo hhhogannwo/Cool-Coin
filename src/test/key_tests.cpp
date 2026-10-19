@@ -689,10 +689,20 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_block_undo)
     BOOST_REQUIRE(state.DisconnectBlock(undo2));
     BOOST_CHECK(state.IsBonded("A"));
     BOOST_CHECK(state.Tip() == first);
-    BOOST_REQUIRE(state.ApplyBlock(first, third,
+    BOOST_CHECK(!state.ApplyBlock(first, third,
         {{StakeEventType::EXIT, "A", stake},
          {StakeEventType::WITHDRAW, "A", stake}}, undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_REQUIRE(state.ApplyBlock(first, third,
+        {{StakeEventType::EXIT, "A", stake}}, undo2));
+    uint256 fourth; fourth.begin()[0] = 4;
+    StakeBlockUndo undo3;
+    BOOST_REQUIRE(state.ApplyBlock(third, fourth,
+        {{StakeEventType::WITHDRAW, "A", stake}}, undo3));
     BOOST_CHECK(!state.IsClaimed(stake));
+    BOOST_REQUIRE(state.DisconnectBlock(undo3));
+    BOOST_CHECK(state.IsClaimed(stake));
     BOOST_REQUIRE(state.DisconnectBlock(undo2));
     BOOST_CHECK(state.IsBonded("A"));
     BOOST_REQUIRE(state.DisconnectBlock(undo1));
