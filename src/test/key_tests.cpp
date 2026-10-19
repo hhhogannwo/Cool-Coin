@@ -7,6 +7,7 @@
 #include <consensus/hybrid_admission.h>
 #include <consensus/hybrid_utxo.h>
 #include <consensus/hybrid_spend_guard.h>
+#include <consensus/hybrid_lifecycle.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -567,6 +568,33 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_spend_conflict)
     BOOST_CHECK(SpendsCommittedStake(CTransaction(ordinary), book));
     BOOST_CHECK(book.Unregister("validator-A"));
     BOOST_CHECK(!SpendsCommittedStake(CTransaction(ordinary), book));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_lifecycle)
+{
+    using namespace Consensus::Hybrid;
+    BondLifecycle lifecycle;
+    uint256 txid;
+    txid.begin()[0] = 0x42;
+    const StakeOutpoint bond{txid, 1};
+    BOOST_CHECK(lifecycle.Bond("A", bond, 100, 100));
+    BOOST_CHECK(lifecycle.IsLocked(bond));
+    BOOST_CHECK(!lifecycle.IsEligible("A"));
+    BOOST_CHECK(!lifecycle.Bond("B", bond, 100, 100));
+    BOOST_CHECK(!lifecycle.Activate("A", 199));
+    BOOST_CHECK(lifecycle.Activate("A", 200));
+    BOOST_CHECK(lifecycle.IsEligible("A"));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 200, UINT32_MAX));
+    BOOST_CHECK(lifecycle.RequestExit("A", 201, 50));
+    BOOST_CHECK(!lifecycle.IsEligible("A"));
+    BOOST_CHECK(lifecycle.IsLocked(bond));
+    BOOST_CHECK(!lifecycle.Withdraw("A", 250));
+    BOOST_CHECK(lifecycle.Withdraw("A", 251));
+    BOOST_CHECK(!lifecycle.IsLocked(bond));
+    BOOST_CHECK(!lifecycle.Withdraw("A", 300));
+    BOOST_CHECK(lifecycle.Bond("B", bond, 300, 100));
+    BOOST_CHECK(!lifecycle.Bond("C", StakeOutpoint{txid, 2}, UINT32_MAX, 1));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
