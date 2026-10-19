@@ -779,21 +779,25 @@ BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
     BOOST_REQUIRE(state.ApplyBlock(uint256{}, a,
         {{StakeEventType::BOND, "Alice", one}}, undo_a));
     BOOST_CHECK(state.Tip() == a);
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(only_alice));
 
     BOOST_REQUIRE(state.ApplyBlock(a, b,
         {{StakeEventType::EXIT, "Alice", one}}, undo_b));
     BOOST_CHECK(!state.IsBonded("Alice"));
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(original_branch));
     BOOST_CHECK(StakeStateCommitment(original_branch) != StakeStateCommitment(only_alice));
 
     BOOST_REQUIRE(state.DisconnectBlock(undo_b));
     BOOST_CHECK(state.Tip() == a);
     BOOST_CHECK(state.IsBonded("Alice"));
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(only_alice));
 
     BOOST_REQUIRE(state.ApplyBlock(a, alternate,
         {{StakeEventType::BOND, "Bob", two}}, undo_alt));
     BOOST_CHECK(state.Tip() == alternate);
     BOOST_CHECK(state.IsBonded("Alice"));
     BOOST_CHECK(state.IsBonded("Bob"));
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(alternate_branch));
     BOOST_CHECK(StakeStateCommitment(alternate_branch) != StakeStateCommitment(original_branch));
 
     // Reconstruct the competing branch from a fresh empty state.
@@ -803,6 +807,7 @@ BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
         {a, alternate, {{StakeEventType::BOND, "Bob", two}}}
     }, rebuilt));
     BOOST_CHECK(rebuilt.Tip() == state.Tip());
+    BOOST_CHECK(StakeStateCommitment(rebuilt.Records()) == StakeStateCommitment(state.Records()));
     BOOST_CHECK(rebuilt.IsBonded("Alice") == state.IsBonded("Alice"));
     BOOST_CHECK(rebuilt.IsBonded("Bob") == state.IsBonded("Bob"));
 }
