@@ -6,6 +6,7 @@
 #include <consensus/hybrid_auth.h>
 #include <consensus/hybrid_admission.h>
 #include <consensus/hybrid_utxo.h>
+#include <consensus/hybrid_spend_guard.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -539,6 +540,33 @@ BOOST_AUTO_TEST_CASE(hybrid_utxo_inspection)
     cache.SpendCoin(outpoint);
     auto spent = InspectStakeOutpoint(cache, stake, 200);
     BOOST_CHECK(!spent.unspent);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_spend_conflict)
+{
+    using namespace Consensus::Hybrid;
+    StakeAdmissionBook book;
+    uint256 txid;
+    txid.begin()[0] = 0x67;
+    uint256 nonce;
+    nonce.begin()[0] = 0x21;
+    ValidatedStakeEvidence proof;
+    proof.outpoint = StakeOutpoint{txid, 2};
+    proof.amount = 1500 * COIN;
+    proof.confirmations = PROPOSED_MIN_CONFIRMATIONS;
+    proof.unspent = true;
+    proof.owner_authorized = true; // SIMULATED evidence only; not mainnet-safe.
+    proof.lock_enforced = true; // SIMULATED evidence only.
+    BOOST_REQUIRE(book.Register("validator-A", proof, nonce));
+
+    CMutableTransaction ordinary;
+    ordinary.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 3});
+    BOOST_CHECK(!SpendsCommittedStake(CTransaction(ordinary), book));
+    ordinary.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 2});
+    BOOST_CHECK(SpendsCommittedStake(CTransaction(ordinary), book));
+    BOOST_CHECK(book.Unregister("validator-A"));
+    BOOST_CHECK(!SpendsCommittedStake(CTransaction(ordinary), book));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
