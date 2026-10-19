@@ -16,6 +16,7 @@
 #include <consensus/hybrid_height_replay.h>
 #include <consensus/hybrid_event_envelope.h>
 #include <consensus/hybrid_tx_intent.h>
+#include <consensus/hybrid_bond_auth.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1102,6 +1103,50 @@ BOOST_AUTO_TEST_CASE(hybrid_transaction_intent_scan)
     BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::NONE);
     mtx.vout[0].scriptPubKey = valid;
     BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::ONE);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_parent_utxo_owner)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache cache(&base);
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pub = key.GetPubKey();
+    const uint160 owner = Hash160(pub);
+    StakeEnvelope intent;
+    intent.intent = StakeIntent::BOND;
+    intent.validator_id = owner;
+    intent.outpoint.txid.begin()[0] = 0xa1;
+    intent.outpoint.vout = 2;
+    const COutPoint outpoint{Txid::FromUint256(intent.outpoint.txid), intent.outpoint.vout};
+    CTxOut deposit;
+    deposit.nValue = 2000 * COIN;
+    deposit.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(owner.begin(), owner.end());
+    cache.AddCoin(outpoint, Coin(std::move(deposit), 100, false), false);
+    uint256 genesis; genesis.begin()[0] = 0x42;
+    uint256 nonce; nonce.begin()[0] = 0x54;
+    const auto digest = RegistrationDigest(genesis, pub, intent.outpoint.txid,
+        intent.outpoint.vout, 2000 * COIN, 200, nonce);
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(key.Sign(digest, signature));
+    BOOST_CHECK(VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 198, 199));
+    uint256 wrong = genesis;
+    wrong.begin()[0] ^= 0x01;
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        wrong, nonce, 199, 200));
+    intent.validator_id.begin()[0] ^= 0x01;
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
+    intent.validator_id = owner;
+    intent.intent = StakeIntent::EXIT;
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
