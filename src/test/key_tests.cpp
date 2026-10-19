@@ -4,6 +4,7 @@
 
 #include <key.h>
 #include <consensus/hybrid_auth.h>
+#include <consensus/hybrid_admission.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -412,6 +413,58 @@ BOOST_AUTO_TEST_CASE(hybrid_validator_authentication)
 
     signature[signature.size() / 2] ^= 1;
     BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, digest, signature));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_admission_bookkeeping)
+{
+    using namespace Consensus::Hybrid;
+    StakeAdmissionBook registry;
+    uint256 txid;
+    txid.begin()[0] = 42;
+    uint256 nonce;
+    nonce.begin()[0] = 7;
+    ValidatedStakeEvidence evidence;
+    evidence.outpoint = StakeOutpoint{txid, 0};
+    evidence.amount = 1000 * COIN;
+    evidence.confirmations = PROPOSED_MIN_CONFIRMATIONS;
+    evidence.unspent = true;
+    evidence.owner_authorized = true;
+    evidence.lock_enforced = true;
+
+    BOOST_CHECK(registry.Register("alice", evidence, nonce));
+    BOOST_CHECK(registry.IsCommitted(evidence.outpoint));
+    BOOST_CHECK(!registry.Register("alice", evidence, nonce));
+    BOOST_CHECK(!registry.Register("bob", evidence, nonce));
+    BOOST_CHECK(registry.Unregister("alice"));
+    BOOST_CHECK(!registry.IsCommitted(evidence.outpoint));
+    // Used nonce remains consumed even after unregistering.
+    BOOST_CHECK(!registry.Register("alice", evidence, nonce));
+    nonce.begin()[0] = 8;
+    BOOST_CHECK(registry.Register("alice", evidence, nonce));
+
+    StakeAdmissionBook invalid;
+    uint256 fresh_nonce;
+    fresh_nonce.begin()[0] = 10;
+    auto probe = evidence;
+    probe.unspent = false;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.owner_authorized = false;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.lock_enforced = false;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.confirmations = PROPOSED_MIN_CONFIRMATIONS - 1;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.amount = MINIMUM_STAKE - 1;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.amount = MAX_MONEY + 1;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    BOOST_CHECK(invalid.Register("bob", evidence, fresh_nonce));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
