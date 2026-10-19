@@ -14,6 +14,7 @@
 #include <consensus/hybrid_state_commitment.h>
 #include <consensus/hybrid_height_ledger.h>
 #include <consensus/hybrid_height_replay.h>
+#include <consensus/hybrid_event_envelope.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1018,6 +1019,54 @@ BOOST_AUTO_TEST_CASE(hybrid_block_spend_guard)
         {{StakeEventType::WITHDRAW, "A", stake}}, ledger));
     BOOST_REQUIRE(ledger.Disconnect(undo));
     BOOST_CHECK(!BlockSpendsBondedStake(transactions, {}, ledger));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_envelope)
+{
+    using namespace Consensus::Hybrid;
+    StakeEnvelope original;
+    original.intent = StakeIntent::BOND;
+    original.outpoint.txid.begin()[0] = 0xab;
+    original.outpoint.txid.begin()[31] = 0xcd;
+    original.outpoint.vout = 0x12345678;
+    original.validator_id.begin()[0] = 0xef;
+
+    const CScript encoded = EncodeStakeEnvelope(original);
+    StakeEnvelope decoded;
+    BOOST_REQUIRE(DecodeStakeEnvelope(encoded, decoded));
+    BOOST_CHECK(decoded.intent == original.intent);
+    BOOST_CHECK(decoded.outpoint == original.outpoint);
+    BOOST_CHECK(decoded.validator_id == original.validator_id);
+
+    for (const StakeIntent intent : {StakeIntent::EXIT, StakeIntent::WITHDRAW}) {
+        original.intent = intent;
+        BOOST_REQUIRE(DecodeStakeEnvelope(EncodeStakeEnvelope(original), decoded));
+        BOOST_CHECK(decoded.intent == intent);
+    }
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_TRUE, decoded));
+
+    // A second opcode or alternate push encoding is not canonical.
+    const CScript trailing = EncodeStakeEnvelope(original) << OP_TRUE;
+    BOOST_CHECK(!DecodeStakeEnvelope(trailing, decoded));
+
+    // Wrong version, opcode or magic fail closed.
+    std::vector<unsigned char> payload;
+    opcodetype opcode;
+    CScript::const_iterator cursor = encoded.begin();
+    BOOST_REQUIRE(encoded.GetOp(cursor, opcode));
+    BOOST_REQUIRE(encoded.GetOp(cursor, opcode, payload));
+    payload[4] = 2;
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+    payload[4] = 1;
+    payload[5] = 4;
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+    payload[5] = 1;
+    payload[0] = 'X';
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+    payload[0] = 'C';
+    payload.pop_back();
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
