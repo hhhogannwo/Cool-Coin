@@ -5,6 +5,7 @@
 #include <key.h>
 #include <consensus/hybrid_auth.h>
 #include <consensus/hybrid_admission.h>
+#include <consensus/hybrid_utxo.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -465,6 +466,48 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_admission_bookkeeping)
     probe.amount = MAX_MONEY + 1;
     BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
     BOOST_CHECK(invalid.Register("bob", evidence, fresh_nonce));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_utxo_inspection)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache cache(&base);
+    uint256 txid;
+    txid.begin()[0] = 51;
+    const StakeOutpoint stake{txid, 0};
+    const COutPoint outpoint{Txid::FromUint256(txid), 0};
+
+    auto missing = InspectStakeOutpoint(cache, stake, 200);
+    BOOST_CHECK(!missing.unspent);
+    BOOST_CHECK(!missing.owner_authorized);
+    BOOST_CHECK(!missing.lock_enforced);
+
+    CTxOut output;
+    output.nValue = 2000 * COIN;
+    output.scriptPubKey = CScript() << OP_TRUE;
+    cache.AddCoin(outpoint, Coin(std::move(output), 100, false), false);
+
+    auto evidence = InspectStakeOutpoint(cache, stake, 199);
+    BOOST_CHECK(evidence.unspent);
+    BOOST_CHECK_EQUAL(evidence.amount, 2000 * COIN);
+    BOOST_CHECK_EQUAL(evidence.confirmations, 100U);
+    BOOST_CHECK(!evidence.owner_authorized);
+    BOOST_CHECK(!evidence.lock_enforced);
+    StakeAdmissionBook book;
+    uint256 nonce;
+    nonce.begin()[0] = 4;
+    BOOST_CHECK(!book.Register("validator", evidence, nonce));
+
+    auto premature = InspectStakeOutpoint(cache, stake, 99);
+    BOOST_CHECK(!premature.unspent);
+    auto age_one = InspectStakeOutpoint(cache, stake, 100);
+    BOOST_CHECK_EQUAL(age_one.confirmations, 1U);
+
+    cache.SpendCoin(outpoint);
+    auto spent = InspectStakeOutpoint(cache, stake, 200);
+    BOOST_CHECK(!spent.unspent);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
