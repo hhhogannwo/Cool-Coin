@@ -753,4 +753,58 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_state_commitment)
     BOOST_CHECK(StakeStateCommitment(a) != StakeStateCommitment({}));
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid1; txid1.begin()[0] = 61;
+    uint256 txid2; txid2.begin()[0] = 62;
+    const StakeOutpoint one{txid1, 0};
+    const StakeOutpoint two{txid2, 1};
+    uint256 a; a.begin()[0] = 21;
+    uint256 b; b.begin()[0] = 22;
+    uint256 alternate; alternate.begin()[0] = 23;
+
+    // Construct a canonical expected state for each branch.
+    const std::map<std::string, StakeStateRecord> only_alice{
+        {"Alice", StakeStateRecord{one, false}}};
+    const std::map<std::string, StakeStateRecord> original_branch{
+        {"Alice", StakeStateRecord{one, true}}};
+    const std::map<std::string, StakeStateRecord> alternate_branch{
+        {"Alice", StakeStateRecord{one, false}},
+        {"Bob", StakeStateRecord{two, false}}};
+
+    StakeStateUndoPrototype state;
+    StakeBlockUndo undo_a, undo_b, undo_alt;
+    BOOST_REQUIRE(state.ApplyBlock(uint256{}, a,
+        {{StakeEventType::BOND, "Alice", one}}, undo_a));
+    BOOST_CHECK(state.Tip() == a);
+
+    BOOST_REQUIRE(state.ApplyBlock(a, b,
+        {{StakeEventType::EXIT, "Alice", one}}, undo_b));
+    BOOST_CHECK(!state.IsBonded("Alice"));
+    BOOST_CHECK(StakeStateCommitment(original_branch) != StakeStateCommitment(only_alice));
+
+    BOOST_REQUIRE(state.DisconnectBlock(undo_b));
+    BOOST_CHECK(state.Tip() == a);
+    BOOST_CHECK(state.IsBonded("Alice"));
+
+    BOOST_REQUIRE(state.ApplyBlock(a, alternate,
+        {{StakeEventType::BOND, "Bob", two}}, undo_alt));
+    BOOST_CHECK(state.Tip() == alternate);
+    BOOST_CHECK(state.IsBonded("Alice"));
+    BOOST_CHECK(state.IsBonded("Bob"));
+    BOOST_CHECK(StakeStateCommitment(alternate_branch) != StakeStateCommitment(original_branch));
+
+    // Reconstruct the competing branch from a fresh empty state.
+    StakeStateUndoPrototype rebuilt;
+    BOOST_REQUIRE(ReplayStakeBlocks({
+        {uint256{}, a, {{StakeEventType::BOND, "Alice", one}}},
+        {a, alternate, {{StakeEventType::BOND, "Bob", two}}}
+    }, rebuilt));
+    BOOST_CHECK(rebuilt.Tip() == state.Tip());
+    BOOST_CHECK(rebuilt.IsBonded("Alice") == state.IsBonded("Alice"));
+    BOOST_CHECK(rebuilt.IsBonded("Bob") == state.IsBonded("Bob"));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
