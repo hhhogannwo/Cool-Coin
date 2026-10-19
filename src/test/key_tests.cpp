@@ -883,8 +883,25 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
     BOOST_REQUIRE(ledger.Apply(current, final_block, 345,
         {{StakeEventType::WITHDRAW, "A", stake}}, final_undo));
     BOOST_CHECK(!ledger.IsLocked(stake));
+    // A fabricated or inconsistent snapshot must not be accepted as undo.
+    HeightBlockUndo forged = final_undo;
+    forged.previous_claims.clear();
+    BOOST_CHECK(!ledger.Disconnect(forged));
+    BOOST_CHECK(ledger.Tip() == final_block);
+    forged = final_undo;
+    forged.previous_height = 100;
+    BOOST_CHECK(!ledger.Disconnect(forged));
+    BOOST_CHECK(ledger.Tip() == final_block);
     BOOST_REQUIRE(ledger.Disconnect(final_undo));
     BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(ledger.Tip() == current);
+    // Undo must restore the pending exit, allowing a different block at 345.
+    uint256 alt; alt.begin()[0] = 16;
+    HeightBlockUndo alternate_undo;
+    BOOST_REQUIRE(ledger.Apply(current, alt, 345, {}, alternate_undo));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(ledger.CanWithdraw("A", 345));
+    BOOST_REQUIRE(ledger.Disconnect(alternate_undo));
     BOOST_CHECK(ledger.Tip() == current);
 }
 
