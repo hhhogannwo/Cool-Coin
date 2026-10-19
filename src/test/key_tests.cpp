@@ -13,6 +13,7 @@
 #include <consensus/hybrid_replay.h>
 #include <consensus/hybrid_state_commitment.h>
 #include <consensus/hybrid_height_ledger.h>
+#include <consensus/hybrid_height_replay.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -903,6 +904,51 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
     BOOST_CHECK(ledger.CanWithdraw("A", 345));
     BOOST_REQUIRE(ledger.Disconnect(alternate_undo));
     BOOST_CHECK(ledger.Tip() == current);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_replay_atomicity)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid; txid.begin()[0] = 91;
+    const StakeOutpoint stake{txid, 0};
+    uint256 a; a.begin()[0] = 31;
+    uint256 last = a;
+    std::vector<HeightStakeReplayBlock> history{
+        {uint256{}, a, 100, {{StakeEventType::BOND, "A", stake}}}
+    };
+    // 100 confirmation blocks followed by the exit and unbonding interval.
+    for (uint32_t height = 101; height <= 345; ++height) {
+        uint256 block;
+        block.begin()[0] = 32;
+        block.begin()[1] = static_cast<unsigned char>(height);
+        const std::vector<StakeEvent> events = height == 201 ?
+            std::vector<StakeEvent>{{StakeEventType::EXIT, "A", stake}} :
+            (height == 345 ? std::vector<StakeEvent>{{StakeEventType::WITHDRAW, "A", stake}} :
+                             std::vector<StakeEvent>{});
+        history.push_back({last, block, height, events});
+        last = block;
+    }
+    HeightStakeLedger state;
+    BOOST_REQUIRE(ReplayHeightStakeBlocks(history, state));
+    BOOST_CHECK(state.Tip() == last);
+    BOOST_CHECK(!state.IsLocked(stake));
+
+    auto corrupt = history;
+    corrupt[3].height += 1; // Discontinuous block heights.
+    BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
+    BOOST_CHECK(state.Tip() == last);
+    BOOST_CHECK(!state.IsLocked(stake));
+
+    corrupt = history;
+    corrupt.back().height = 344; // Withdrawal must not occur early.
+    BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
+    BOOST_CHECK(state.Tip() == last);
+
+    corrupt = history;
+    corrupt[2].parent.SetNull(); // Broken parent chain.
+    BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
+    BOOST_CHECK(state.Tip() == last);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
