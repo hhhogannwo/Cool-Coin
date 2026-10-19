@@ -15,6 +15,7 @@
 #include <consensus/hybrid_height_ledger.h>
 #include <consensus/hybrid_height_replay.h>
 #include <consensus/hybrid_event_envelope.h>
+#include <consensus/hybrid_tx_intent.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1067,6 +1068,38 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_envelope)
     payload[0] = 'C';
     payload.pop_back();
     BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_transaction_intent_scan)
+{
+    using namespace Consensus::Hybrid;
+    StakeEnvelope event;
+    event.outpoint.txid.begin()[0] = 44;
+    event.outpoint.vout = 3;
+    event.validator_id.begin()[0] = 77;
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(event));
+    StakeEnvelope output;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::ONE);
+    BOOST_CHECK(output.outpoint == event.outpoint);
+    BOOST_CHECK(output.validator_id == event.validator_id);
+
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(event));
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
+    mtx.vout.pop_back();
+    mtx.vout[0].nValue = 1;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
+    mtx.vout[0].nValue = 0;
+    const CScript valid = mtx.vout[0].scriptPubKey;
+    mtx.vout[0].scriptPubKey = valid << OP_TRUE;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
+
+    mtx.vout[0].scriptPubKey = CScript() << OP_RETURN <<
+        std::vector<unsigned char>{'N','O','T','S','T','A','K','E'};
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::NONE);
+    mtx.vout[0].scriptPubKey = valid;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::ONE);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
