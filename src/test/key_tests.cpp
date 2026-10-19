@@ -941,7 +941,9 @@ BOOST_AUTO_TEST_CASE(hybrid_height_replay_atomicity)
     BOOST_CHECK(!state.IsLocked(stake));
 
     corrupt = history;
-    corrupt.back().height = 344; // Withdrawal must not occur early.
+    // Move the exit to height 202: a withdrawal at 345 is now too early.
+    corrupt[101].events.clear();
+    corrupt[102].events = {{StakeEventType::EXIT, "A", stake}};
     BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
     BOOST_CHECK(state.Tip() == last);
 
