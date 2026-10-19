@@ -11,6 +11,7 @@
 #include <consensus/hybrid_owner_proof.h>
 #include <consensus/hybrid_state_undo.h>
 #include <consensus/hybrid_replay.h>
+#include <consensus/hybrid_state_commitment.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -729,6 +730,27 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_replay)
     BOOST_CHECK(!ReplayStakeBlocks(bad_history, reconstructed));
     BOOST_CHECK(reconstructed.Tip() == c);
     BOOST_CHECK(!reconstructed.IsClaimed(stake));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_state_commitment)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid1; txid1.begin()[0] = 1;
+    uint256 txid2; txid2.begin()[0] = 2;
+    const StakeStateRecord one{StakeOutpoint{txid1, 0}, false};
+    const StakeStateRecord two{StakeOutpoint{txid2, 1}, false};
+    std::map<std::string, StakeStateRecord> a, b;
+    a.emplace("Alice", one); a.emplace("Bob", two);
+    b.emplace("Bob", two); b.emplace("Alice", one);
+    const uint256 commitment = StakeStateCommitment(a);
+    BOOST_CHECK(commitment == StakeStateCommitment(b));
+    b["Bob"].exiting = true;
+    BOOST_CHECK(commitment != StakeStateCommitment(b));
+    b["Bob"].exiting = false;
+    b["Bob"].outpoint.vout = 2;
+    BOOST_CHECK(commitment != StakeStateCommitment(b));
+    BOOST_CHECK(StakeStateCommitment(a) != StakeStateCommitment({}));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
