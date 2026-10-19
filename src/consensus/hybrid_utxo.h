@@ -22,7 +22,7 @@ inline ValidatedStakeEvidence InspectStakeOutpoint(const CCoinsView& view,
 {
     ValidatedStakeEvidence result;
     result.outpoint = outpoint;
-    const COutPoint chain_outpoint{outpoint.txid, outpoint.vout};
+    const COutPoint chain_outpoint{Txid::FromUint256(outpoint.txid), outpoint.vout};
     Coin coin;
     if (!view.GetCoin(chain_outpoint, coin) || coin.IsSpent()) return result;
     if (coin.nHeight > tip_height) return result; // fail closed on inconsistent view
