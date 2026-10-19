@@ -524,6 +524,18 @@ BOOST_AUTO_TEST_CASE(hybrid_utxo_inspection)
     cache.AddCoin(bad_outpoint, Coin(std::move(low_output), 101, false), false);
     BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{bad_txid, 0}, 200).unspent);
 
+    uint256 minted_txid = txid;
+    minted_txid.begin()[0] = 54;
+    const COutPoint minted_outpoint{Txid::FromUint256(minted_txid), 0};
+    CTxOut minted_output;
+    minted_output.nValue = 2000 * COIN;
+    minted_output.scriptPubKey = CScript() << OP_TRUE;
+    cache.AddCoin(minted_outpoint, Coin(std::move(minted_output), 100, true), false);
+    BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{minted_txid, 0}, 198).unspent);
+    auto mature = InspectStakeOutpoint(cache, StakeOutpoint{minted_txid, 0}, 199);
+    BOOST_CHECK(mature.unspent);
+    BOOST_CHECK_EQUAL(mature.confirmations, 100U);
+
     cache.SpendCoin(outpoint);
     auto spent = InspectStakeOutpoint(cache, stake, 200);
     BOOST_CHECK(!spent.unspent);
