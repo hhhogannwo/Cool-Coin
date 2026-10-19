@@ -9,6 +9,7 @@
 #include <consensus/hybrid_spend_guard.h>
 #include <consensus/hybrid_lifecycle.h>
 #include <consensus/hybrid_owner_proof.h>
+#include <consensus/hybrid_state_undo.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -654,6 +655,48 @@ BOOST_AUTO_TEST_CASE(hybrid_p2wpkh_owner_proof)
     CTxOut wrong_script = deposit;
     wrong_script.scriptPubKey = CScript() << OP_TRUE;
     BOOST_CHECK(!VerifyP2WPKHRegistration(wrong_script, pub, digest, signature));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_block_undo)
+{
+    using namespace Consensus::Hybrid;
+    StakeStateUndoPrototype state;
+    uint256 txid; txid.begin()[0] = 44;
+    const StakeOutpoint stake{txid, 0};
+    uint256 first; first.begin()[0] = 1;
+    uint256 second; second.begin()[0] = 2;
+    uint256 third; third.begin()[0] = 3;
+    StakeBlockUndo undo1, undo2;
+    BOOST_REQUIRE(state.ApplyBlock(uint256{}, first,
+        {{StakeEventType::BOND, "A", stake}}, undo1));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_CHECK(!state.ApplyBlock(first, second,
+        {{StakeEventType::BOND, "B", stake}}, undo2));
+    BOOST_CHECK(state.Tip() == first);
+    BOOST_CHECK(!state.ApplyBlock(first, second,
+        {{StakeEventType::EXIT, "A", stake},
+         {StakeEventType::BOND, "B", stake}}, undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_REQUIRE(state.ApplyBlock(first, second,
+        {{StakeEventType::EXIT, "A", stake}}, undo2));
+    BOOST_CHECK(!state.IsBonded("A"));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_CHECK(!state.DisconnectBlock(undo1));
+    BOOST_REQUIRE(state.DisconnectBlock(undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_CHECK(state.Tip() == first);
+    BOOST_REQUIRE(state.ApplyBlock(first, third,
+        {{StakeEventType::EXIT, "A", stake},
+         {StakeEventType::WITHDRAW, "A", stake}}, undo2));
+    BOOST_CHECK(!state.IsClaimed(stake));
+    BOOST_REQUIRE(state.DisconnectBlock(undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_REQUIRE(state.DisconnectBlock(undo1));
+    BOOST_CHECK(!state.IsBonded("A"));
+    BOOST_CHECK(!state.IsClaimed(stake));
+    BOOST_CHECK(state.Tip().IsNull());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
