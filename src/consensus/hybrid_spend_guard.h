@@ -9,6 +9,7 @@
 #define COOLCOIN_CONSENSUS_HYBRID_SPEND_GUARD_H
 
 #include <consensus/hybrid_admission.h>
+#include <consensus/hybrid_height_ledger.h>
 #include <primitives/transaction.h>
 
 namespace Consensus::Hybrid {
@@ -21,6 +22,20 @@ inline bool SpendsCommittedStake(const CTransaction& transaction,
     for (const CTxIn& input : transaction.vin) {
         StakeOutpoint outpoint{input.prevout.hash.ToUint256(), input.prevout.n};
         if (book.IsCommitted(outpoint)) return true;
+    }
+    return false;
+}
+
+// Check transactions against the height-aware ledger, not caller-supplied
+// admission flags. The claim remains locked through EXIT_PENDING. This is
+// a read-only integration seam: NOT called by ConnectBlock, and does not
+// authorize an on-chain withdrawal transaction.
+inline bool SpendsHeightLockedStake(const CTransaction& transaction,
+                                    const HeightStakeLedger& ledger)
+{
+    for (const CTxIn& input : transaction.vin) {
+        const StakeOutpoint outpoint{input.prevout.hash.ToUint256(), input.prevout.n};
+        if (ledger.IsLocked(outpoint)) return true;
     }
     return false;
 }
