@@ -43,6 +43,8 @@ public:
         if (parent != tip_ || block.IsNull() || block == parent) return false;
         auto updated = records_;
         auto outpoints = claimed_;
+        // A bond cannot exit and withdraw within one block. A withdrawal
+        // must reference an exit already present in the parent state.
         for (const auto& event : events) {
             if (event.validator.empty()) return false;
             auto it = updated.find(event.validator);
@@ -59,7 +61,9 @@ public:
                 it->second.exiting = true;
                 break;
             case StakeEventType::WITHDRAW:
-                if (it == updated.end() || !it->second.exiting ||
+                const auto parent_record = records_.find(event.validator);
+                if (parent_record == records_.end() || !parent_record->second.exiting ||
+                    it == updated.end() || !it->second.exiting ||
                     !(it->second.outpoint.txid == event.outpoint.txid &&
                       it->second.outpoint.vout == event.outpoint.vout)) return false;
                 outpoints.erase(it->second.outpoint);
