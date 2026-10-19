@@ -60,7 +60,7 @@ public:
                       it->second.outpoint.vout == event.outpoint.vout)) return false;
                 it->second.exiting = true;
                 break;
-            case StakeEventType::WITHDRAW:
+            case StakeEventType::WITHDRAW: {
                 const auto parent_record = records_.find(event.validator);
                 if (parent_record == records_.end() || !parent_record->second.exiting ||
                     it == updated.end() || !it->second.exiting ||
@@ -69,6 +69,7 @@ public:
                 outpoints.erase(it->second.outpoint);
                 updated.erase(it);
                 break;
+            }
             default:
                 return false;
             }
