@@ -11,6 +11,8 @@
 #include <consensus/hybrid_admission.h>
 #include <consensus/hybrid_height_ledger.h>
 #include <primitives/transaction.h>
+#include <set>
+#include <vector>
 
 namespace Consensus::Hybrid {
 
@@ -36,6 +38,32 @@ inline bool SpendsHeightLockedStake(const CTransaction& transaction,
     for (const CTxIn& input : transaction.vin) {
         const StakeOutpoint outpoint{input.prevout.hash.ToUint256(), input.prevout.n};
         if (ledger.IsLocked(outpoint)) return true;
+    }
+    return false;
+}
+
+// Experimental block-level conflict scan. Catch a spend against a bond
+// established earlier in the chain OR registered within this same block.
+// Do not permit WITHDRAW events to bypass this check: unlocking requires
+// a separately specified consensus transaction format and spending rules.
+// Events are still caller supplied; this is NOT consensus enforcement.
+inline bool BlockSpendsBondedStake(
+    const std::vector<CTransactionRef>& transactions,
+    const std::vector<StakeEvent>& events,
+    const HeightStakeLedger& parent_ledger)
+{
+    std::set<StakeOutpoint> new_bonds;
+    for (const auto& event : events) {
+        if (event.type == StakeEventType::BOND) {
+            new_bonds.insert(event.outpoint);
+        }
+    }
+    for (const auto& tx : transactions) {
+        if (!tx) return true; // Invalid transaction reference: fail closed.
+        for (const auto& input : tx->vin) {
+            const StakeOutpoint spent{input.prevout.hash.ToUint256(), input.prevout.n};
+            if (parent_ledger.IsLocked(spent) || new_bonds.count(spent)) return true;
+        }
     }
     return false;
 }
