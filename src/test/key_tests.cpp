@@ -3,6 +3,22 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
+#include <consensus/hybrid_auth.h>
+#include <consensus/hybrid_admission.h>
+#include <consensus/hybrid_utxo.h>
+#include <consensus/hybrid_spend_guard.h>
+#include <consensus/hybrid_lifecycle.h>
+#include <consensus/hybrid_owner_proof.h>
+#include <consensus/hybrid_state_undo.h>
+#include <consensus/hybrid_replay.h>
+#include <consensus/hybrid_state_commitment.h>
+#include <consensus/hybrid_height_ledger.h>
+#include <consensus/hybrid_height_replay.h>
+#include <consensus/hybrid_event_envelope.h>
+#include <consensus/hybrid_tx_intent.h>
+#include <consensus/hybrid_bond_auth.h>
+#include <consensus/hybrid_bond_preflight.h>
+#include <consensus/hybrid_tx_auth.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -362,6 +378,906 @@ BOOST_AUTO_TEST_CASE(key_ellswift)
         }
         BOOST_CHECK(key.GetPubKey() == decoded_pubkey);
     }
+}
+
+
+// Development-only hybrid PoS authentication checks. Uses ephemeral keys,
+// not the legacy Bitcoin-format WIF fixtures or any wallet secrets.
+BOOST_AUTO_TEST_CASE(hybrid_validator_authentication)
+{
+    CKey signer;
+    signer.MakeNewKey(true);
+    CKey impostor;
+    impostor.MakeNewKey(true);
+    const CPubKey validator_key = signer.GetPubKey();
+    const CPubKey wrong_key = impostor.GetPubKey();
+
+    uint256 genesis;
+    genesis.begin()[0] = 0x42;
+    uint256 stake_txid;
+    stake_txid.begin()[0] = 0x24;
+    uint256 nonce;
+    nonce.begin()[0] = 0x11;
+
+    const CAmount amount = 1000 * COIN;
+    const uint256 digest = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 0, amount, 50000, nonce);
+
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(signer.Sign(digest, signature));
+    BOOST_REQUIRE(!signature.empty());
+    BOOST_CHECK(Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, digest, signature));
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(wrong_key, digest, signature));
+
+    // Each changed field must alter the signed digest, invalidating the proof.
+    const auto altered_amount = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 0, amount + COIN, 50000, nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_amount, signature));
+    const auto altered_vout = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 1, amount, 50000, nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_vout, signature));
+    uint256 next_nonce = nonce;
+    next_nonce.begin()[0] ^= 1;
+    const auto altered_nonce = Consensus::Hybrid::RegistrationDigest(
+        genesis, validator_key, stake_txid, 0, amount, 50000, next_nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_nonce, signature));
+    const auto altered_chain = Consensus::Hybrid::RegistrationDigest(
+        uint256{}, validator_key, stake_txid, 0, amount, 50000, nonce);
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, altered_chain, signature));
+
+    signature[signature.size() / 2] ^= 1;
+    BOOST_CHECK(!Consensus::Hybrid::VerifyRegistrationKeyProof(validator_key, digest, signature));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_admission_bookkeeping)
+{
+    using namespace Consensus::Hybrid;
+    StakeAdmissionBook registry;
+    uint256 txid;
+    txid.begin()[0] = 42;
+    uint256 nonce;
+    nonce.begin()[0] = 7;
+    ValidatedStakeEvidence evidence;
+    evidence.outpoint = StakeOutpoint{txid, 0};
+    evidence.amount = 1000 * COIN;
+    evidence.confirmations = PROPOSED_MIN_CONFIRMATIONS;
+    evidence.unspent = true;
+    evidence.owner_authorized = true;
+    evidence.lock_enforced = true;
+
+    BOOST_CHECK(registry.Register("alice", evidence, nonce));
+    BOOST_CHECK(registry.IsCommitted(evidence.outpoint));
+    BOOST_CHECK(!registry.Register("alice", evidence, nonce));
+    BOOST_CHECK(!registry.Register("bob", evidence, nonce));
+    BOOST_CHECK(registry.Unregister("alice"));
+    BOOST_CHECK(!registry.IsCommitted(evidence.outpoint));
+    // Used nonce remains consumed even after unregistering.
+    BOOST_CHECK(!registry.Register("alice", evidence, nonce));
+    nonce.begin()[0] = 8;
+    BOOST_CHECK(registry.Register("alice", evidence, nonce));
+
+    StakeAdmissionBook invalid;
+    uint256 fresh_nonce;
+    fresh_nonce.begin()[0] = 10;
+    auto probe = evidence;
+    probe.unspent = false;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.owner_authorized = false;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.lock_enforced = false;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.confirmations = PROPOSED_MIN_CONFIRMATIONS - 1;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.amount = MINIMUM_STAKE - 1;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    probe = evidence;
+    probe.amount = MAX_MONEY + 1;
+    BOOST_CHECK(!invalid.Register("bob", probe, fresh_nonce));
+    BOOST_CHECK(invalid.Register("bob", evidence, fresh_nonce));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_utxo_inspection)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache cache(&base);
+    uint256 txid;
+    txid.begin()[0] = 51;
+    const StakeOutpoint stake{txid, 0};
+    const COutPoint outpoint{Txid::FromUint256(txid), 0};
+
+    auto missing = InspectStakeOutpoint(cache, stake, 200);
+    BOOST_CHECK(!missing.unspent);
+    BOOST_CHECK(!missing.owner_authorized);
+    BOOST_CHECK(!missing.lock_enforced);
+
+    CTxOut output;
+    output.nValue = 2000 * COIN;
+    output.scriptPubKey = CScript() << OP_TRUE;
+    cache.AddCoin(outpoint, Coin(std::move(output), 100, false), false);
+
+    auto evidence = InspectStakeOutpoint(cache, stake, 199);
+    BOOST_CHECK(evidence.unspent);
+    BOOST_CHECK_EQUAL(evidence.amount, 2000 * COIN);
+    BOOST_CHECK_EQUAL(evidence.confirmations, 100U);
+    BOOST_CHECK(!evidence.owner_authorized);
+    BOOST_CHECK(!evidence.lock_enforced);
+    StakeAdmissionBook book;
+    uint256 nonce;
+    nonce.begin()[0] = 4;
+    BOOST_CHECK(!book.Register("validator", evidence, nonce));
+
+    auto premature = InspectStakeOutpoint(cache, stake, 99);
+    BOOST_CHECK(!premature.unspent);
+    auto age_one = InspectStakeOutpoint(cache, stake, 100);
+    BOOST_CHECK_EQUAL(age_one.confirmations, 1U);
+
+    // Provably unspendable outputs, empty scripts and insufficient value
+    // must never be interpreted as eligible staking deposits.
+    uint256 bad_txid = txid;
+    bad_txid.begin()[0] = 52;
+    COutPoint bad_outpoint{Txid::FromUint256(bad_txid), 0};
+    CTxOut bad_output;
+    bad_output.nValue = 2000 * COIN;
+    bad_output.scriptPubKey = CScript() << OP_RETURN;
+    cache.AddCoin(bad_outpoint, Coin(std::move(bad_output), 101, false), false);
+    BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{bad_txid, 0}, 200).unspent);
+
+    bad_txid.begin()[0] = 53;
+    bad_outpoint = COutPoint{Txid::FromUint256(bad_txid), 0};
+    CTxOut low_output;
+    low_output.nValue = MINIMUM_STAKE - 1;
+    low_output.scriptPubKey = CScript() << OP_TRUE;
+    cache.AddCoin(bad_outpoint, Coin(std::move(low_output), 101, false), false);
+    BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{bad_txid, 0}, 200).unspent);
+
+    uint256 minted_txid = txid;
+    minted_txid.begin()[0] = 54;
+    const COutPoint minted_outpoint{Txid::FromUint256(minted_txid), 0};
+    CTxOut minted_output;
+    minted_output.nValue = 2000 * COIN;
+    minted_output.scriptPubKey = CScript() << OP_TRUE;
+    cache.AddCoin(minted_outpoint, Coin(std::move(minted_output), 100, true), false);
+    BOOST_CHECK(!InspectStakeOutpoint(cache, StakeOutpoint{minted_txid, 0}, 198).unspent);
+    auto mature = InspectStakeOutpoint(cache, StakeOutpoint{minted_txid, 0}, 199);
+    BOOST_CHECK(mature.unspent);
+    BOOST_CHECK_EQUAL(mature.confirmations, 100U);
+
+    cache.SpendCoin(outpoint);
+    auto spent = InspectStakeOutpoint(cache, stake, 200);
+    BOOST_CHECK(!spent.unspent);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_spend_conflict)
+{
+    using namespace Consensus::Hybrid;
+    StakeAdmissionBook book;
+    uint256 txid;
+    txid.begin()[0] = 0x67;
+    uint256 nonce;
+    nonce.begin()[0] = 0x21;
+    ValidatedStakeEvidence proof;
+    proof.outpoint = StakeOutpoint{txid, 2};
+    proof.amount = 1500 * COIN;
+    proof.confirmations = PROPOSED_MIN_CONFIRMATIONS;
+    proof.unspent = true;
+    proof.owner_authorized = true; // SIMULATED evidence only; not mainnet-safe.
+    proof.lock_enforced = true; // SIMULATED evidence only.
+    BOOST_REQUIRE(book.Register("validator-A", proof, nonce));
+
+    CMutableTransaction ordinary;
+    ordinary.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 3});
+    BOOST_CHECK(!SpendsCommittedStake(CTransaction(ordinary), book));
+    ordinary.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 2});
+    BOOST_CHECK(SpendsCommittedStake(CTransaction(ordinary), book));
+    BOOST_CHECK(book.Unregister("validator-A"));
+    BOOST_CHECK(!SpendsCommittedStake(CTransaction(ordinary), book));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_lifecycle)
+{
+    using namespace Consensus::Hybrid;
+    BondLifecycle lifecycle;
+    uint256 txid;
+    txid.begin()[0] = 0x42;
+    const StakeOutpoint bond{txid, 1};
+    BOOST_CHECK(lifecycle.Bond("A", bond, 100, 100));
+    BOOST_CHECK(lifecycle.IsLocked(bond));
+    BOOST_CHECK(!lifecycle.IsEligible("A"));
+    BOOST_CHECK(!lifecycle.Bond("B", bond, 100, 100));
+    BOOST_CHECK(!lifecycle.Withdraw("A", 200));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 190, 50));
+    BOOST_CHECK(!lifecycle.Bond("A", StakeOutpoint{txid, 2}, 120, 100));
+    BOOST_CHECK(!lifecycle.Activate("A", 199));
+    BOOST_CHECK(lifecycle.Activate("A", 200));
+    BOOST_CHECK(lifecycle.IsEligible("A"));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 200, UINT32_MAX));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 201, 143));
+    BOOST_CHECK(lifecycle.RequestExit("A", 201, PROPOSED_UNBONDING_BLOCKS));
+    BOOST_CHECK(!lifecycle.Activate("A", 300));
+    BOOST_CHECK(!lifecycle.RequestExit("A", 202, 50));
+    BOOST_CHECK(!lifecycle.IsEligible("A"));
+    BOOST_CHECK(lifecycle.IsLocked(bond));
+    BOOST_CHECK(!lifecycle.Withdraw("A", 344));
+    BOOST_CHECK(lifecycle.Withdraw("A", 345));
+    BOOST_CHECK(!lifecycle.IsLocked(bond));
+    BOOST_CHECK(!lifecycle.Withdraw("A", 300));
+    BOOST_CHECK(lifecycle.Bond("B", bond, 300, 100));
+    BOOST_CHECK(!lifecycle.Bond("C", StakeOutpoint{txid, 2}, UINT32_MAX, 1));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_p2wpkh_owner_proof)
+{
+    using namespace Consensus::Hybrid;
+    CKey owner;
+    owner.MakeNewKey(true);
+    const CPubKey pub = owner.GetPubKey();
+    const uint160 keyhash = Hash160(pub);
+    CTxOut deposit;
+    deposit.nValue = 2000 * COIN;
+    deposit.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(keyhash.begin(), keyhash.end());
+    uint256 genesis;
+    genesis.begin()[0] = 1;
+    uint256 txid;
+    txid.begin()[0] = 2;
+    uint256 nonce;
+    nonce.begin()[0] = 3;
+    const uint256 digest = RegistrationDigest(genesis, pub, txid, 0, deposit.nValue, 50000, nonce);
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(owner.Sign(digest, signature));
+    BOOST_CHECK(VerifyP2WPKHRegistration(deposit, pub, digest, signature));
+
+    CKey attacker;
+    attacker.MakeNewKey(true);
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, attacker.GetPubKey(), digest, signature));
+    uint256 wrong_digest = digest;
+    wrong_digest.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub, wrong_digest, signature));
+    // The signature binds chain, outpoint, amount, height and nonce.
+    uint256 foreign_genesis = genesis;
+    foreign_genesis.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(foreign_genesis, pub, txid, 0, deposit.nValue, 50000, nonce), signature));
+    uint256 different_txid = txid;
+    different_txid.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, different_txid, 0, deposit.nValue, 50000, nonce), signature));
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 1, deposit.nValue, 50000, nonce), signature));
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 0, deposit.nValue + 1, 50000, nonce), signature));
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 0, deposit.nValue, 50001, nonce), signature));
+    uint256 another_nonce = nonce;
+    another_nonce.begin()[0] ^= 1;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(deposit, pub,
+        RegistrationDigest(genesis, pub, txid, 0, deposit.nValue, 50000, another_nonce), signature));
+    CTxOut wrong_script = deposit;
+    wrong_script.scriptPubKey = CScript() << OP_TRUE;
+    BOOST_CHECK(!VerifyP2WPKHRegistration(wrong_script, pub, digest, signature));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_block_undo)
+{
+    using namespace Consensus::Hybrid;
+    StakeStateUndoPrototype state;
+    uint256 txid; txid.begin()[0] = 44;
+    const StakeOutpoint stake{txid, 0};
+    uint256 first; first.begin()[0] = 1;
+    uint256 second; second.begin()[0] = 2;
+    uint256 third; third.begin()[0] = 3;
+    StakeBlockUndo undo1, undo2;
+    BOOST_REQUIRE(state.ApplyBlock(uint256{}, first,
+        {{StakeEventType::BOND, "A", stake}}, undo1));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_CHECK(!state.ApplyBlock(first, second,
+        {{StakeEventType::BOND, "B", stake}}, undo2));
+    BOOST_CHECK(state.Tip() == first);
+    BOOST_CHECK(!state.ApplyBlock(first, second,
+        {{StakeEventType::EXIT, "A", stake},
+         {StakeEventType::BOND, "B", stake}}, undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_REQUIRE(state.ApplyBlock(first, second,
+        {{StakeEventType::EXIT, "A", stake}}, undo2));
+    BOOST_CHECK(!state.IsBonded("A"));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_CHECK(!state.DisconnectBlock(undo1));
+    BOOST_REQUIRE(state.DisconnectBlock(undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_CHECK(state.Tip() == first);
+    BOOST_CHECK(!state.ApplyBlock(first, third,
+        {{StakeEventType::EXIT, "A", stake},
+         {StakeEventType::WITHDRAW, "A", stake}}, undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_REQUIRE(state.ApplyBlock(first, third,
+        {{StakeEventType::EXIT, "A", stake}}, undo2));
+    uint256 fourth; fourth.begin()[0] = 4;
+    StakeBlockUndo undo3;
+    BOOST_REQUIRE(state.ApplyBlock(third, fourth,
+        {{StakeEventType::WITHDRAW, "A", stake}}, undo3));
+    BOOST_CHECK(!state.IsClaimed(stake));
+    BOOST_REQUIRE(state.DisconnectBlock(undo3));
+    BOOST_CHECK(state.IsClaimed(stake));
+    BOOST_REQUIRE(state.DisconnectBlock(undo2));
+    BOOST_CHECK(state.IsBonded("A"));
+    BOOST_REQUIRE(state.DisconnectBlock(undo1));
+    BOOST_CHECK(!state.IsBonded("A"));
+    BOOST_CHECK(!state.IsClaimed(stake));
+    BOOST_CHECK(state.Tip().IsNull());
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_replay)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid; txid.begin()[0] = 55;
+    const StakeOutpoint stake{txid, 0};
+    uint256 a; a.begin()[0] = 11;
+    uint256 b; b.begin()[0] = 12;
+    uint256 c; c.begin()[0] = 13;
+    const std::vector<StakeReplayBlock> history{
+        {uint256{}, a, {{StakeEventType::BOND, "A", stake}}},
+        {a, b, {{StakeEventType::EXIT, "A", stake}}},
+        {b, c, {{StakeEventType::WITHDRAW, "A", stake}}}
+    };
+    StakeStateUndoPrototype before_restart;
+    BOOST_REQUIRE(ReplayStakeBlocks(history, before_restart));
+    BOOST_CHECK(before_restart.Tip() == c);
+    BOOST_CHECK(!before_restart.IsClaimed(stake));
+    StakeStateUndoPrototype reconstructed;
+    BOOST_REQUIRE(ReplayStakeBlocks(history, reconstructed));
+    BOOST_CHECK(reconstructed.Tip() == before_restart.Tip());
+    BOOST_CHECK(!reconstructed.IsClaimed(stake));
+    const std::vector<StakeReplayBlock> bad_history{
+        {uint256{}, a, {{StakeEventType::BOND, "A", stake}}},
+        {c, b, {{StakeEventType::EXIT, "A", stake}}}
+    };
+    BOOST_CHECK(!ReplayStakeBlocks(bad_history, reconstructed));
+    BOOST_CHECK(reconstructed.Tip() == c);
+    BOOST_CHECK(!reconstructed.IsClaimed(stake));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_state_commitment)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid1; txid1.begin()[0] = 1;
+    uint256 txid2; txid2.begin()[0] = 2;
+    const StakeStateRecord one{StakeOutpoint{txid1, 0}, false};
+    const StakeStateRecord two{StakeOutpoint{txid2, 1}, false};
+    std::map<std::string, StakeStateRecord> a, b;
+    a.emplace("Alice", one); a.emplace("Bob", two);
+    b.emplace("Bob", two); b.emplace("Alice", one);
+    const uint256 commitment = StakeStateCommitment(a);
+    BOOST_CHECK(commitment == StakeStateCommitment(b));
+    b["Bob"].exiting = true;
+    BOOST_CHECK(commitment != StakeStateCommitment(b));
+    b["Bob"].exiting = false;
+    b["Bob"].outpoint.vout = 2;
+    BOOST_CHECK(commitment != StakeStateCommitment(b));
+    BOOST_CHECK(StakeStateCommitment(a) != StakeStateCommitment({}));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid1; txid1.begin()[0] = 61;
+    uint256 txid2; txid2.begin()[0] = 62;
+    const StakeOutpoint one{txid1, 0};
+    const StakeOutpoint two{txid2, 1};
+    uint256 a; a.begin()[0] = 21;
+    uint256 b; b.begin()[0] = 22;
+    uint256 alternate; alternate.begin()[0] = 23;
+
+    // Construct a canonical expected state for each branch.
+    const std::map<std::string, StakeStateRecord> only_alice{
+        {"Alice", StakeStateRecord{one, false}}};
+    const std::map<std::string, StakeStateRecord> original_branch{
+        {"Alice", StakeStateRecord{one, true}}};
+    const std::map<std::string, StakeStateRecord> alternate_branch{
+        {"Alice", StakeStateRecord{one, false}},
+        {"Bob", StakeStateRecord{two, false}}};
+
+    StakeStateUndoPrototype state;
+    StakeBlockUndo undo_a, undo_b, undo_alt;
+    BOOST_REQUIRE(state.ApplyBlock(uint256{}, a,
+        {{StakeEventType::BOND, "Alice", one}}, undo_a));
+    BOOST_CHECK(state.Tip() == a);
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(only_alice));
+
+    BOOST_REQUIRE(state.ApplyBlock(a, b,
+        {{StakeEventType::EXIT, "Alice", one}}, undo_b));
+    BOOST_CHECK(!state.IsBonded("Alice"));
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(original_branch));
+    BOOST_CHECK(StakeStateCommitment(original_branch) != StakeStateCommitment(only_alice));
+
+    BOOST_REQUIRE(state.DisconnectBlock(undo_b));
+    BOOST_CHECK(state.Tip() == a);
+    BOOST_CHECK(state.IsBonded("Alice"));
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(only_alice));
+
+    BOOST_REQUIRE(state.ApplyBlock(a, alternate,
+        {{StakeEventType::BOND, "Bob", two}}, undo_alt));
+    BOOST_CHECK(state.Tip() == alternate);
+    BOOST_CHECK(state.IsBonded("Alice"));
+    BOOST_CHECK(state.IsBonded("Bob"));
+    BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(alternate_branch));
+    BOOST_CHECK(StakeStateCommitment(alternate_branch) != StakeStateCommitment(original_branch));
+
+    // Reconstruct the competing branch from a fresh empty state.
+    StakeStateUndoPrototype rebuilt;
+    BOOST_REQUIRE(ReplayStakeBlocks({
+        {uint256{}, a, {{StakeEventType::BOND, "Alice", one}}},
+        {a, alternate, {{StakeEventType::BOND, "Bob", two}}}
+    }, rebuilt));
+    BOOST_CHECK(rebuilt.Tip() == state.Tip());
+    BOOST_CHECK(StakeStateCommitment(rebuilt.Records()) == StakeStateCommitment(state.Records()));
+    BOOST_CHECK(rebuilt.IsBonded("Alice") == state.IsBonded("Alice"));
+    BOOST_CHECK(rebuilt.IsBonded("Bob") == state.IsBonded("Bob"));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint256 txid; txid.begin()[0] = 81;
+    const StakeOutpoint stake{txid, 0};
+    uint256 current; current.begin()[0] = 10;
+    HeightBlockUndo bond_undo;
+    BOOST_REQUIRE(ledger.Apply(uint256{}, current, 100,
+        {{StakeEventType::BOND, "A", stake}}, bond_undo));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(!ledger.IsBonded("A"));
+    BOOST_CHECK(!ledger.Apply(current, txid, 102, {}, bond_undo));
+    BOOST_CHECK(ledger.Tip() == current);
+
+    uint256 next;
+    for (uint32_t height = 101; height <= 200; ++height) {
+        next.SetNull();
+        next.begin()[0] = 11;
+        next.begin()[1] = static_cast<unsigned char>(height);
+        HeightBlockUndo undo;
+        BOOST_REQUIRE(ledger.Apply(current, next, height, {}, undo));
+        current = next;
+        BOOST_CHECK(ledger.IsBonded("A") == (height >= 200));
+    }
+    uint256 exit_block; exit_block.begin()[0] = 12;
+    HeightBlockUndo exit_undo;
+    BOOST_REQUIRE(ledger.Apply(current, exit_block, 201,
+        {{StakeEventType::EXIT, "A", stake}}, exit_undo));
+    BOOST_CHECK(!ledger.IsBonded("A"));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(!ledger.CanWithdraw("A", 344));
+    BOOST_CHECK(ledger.CanWithdraw("A", 345));
+    uint256 invalid; invalid.begin()[0] = 13;
+    HeightBlockUndo withdrawal_undo;
+    BOOST_CHECK(!ledger.Apply(exit_block, invalid, 202,
+        {{StakeEventType::WITHDRAW, "A", stake}}, withdrawal_undo));
+    BOOST_CHECK(ledger.Tip() == exit_block);
+    BOOST_CHECK(ledger.IsLocked(stake));
+    // Invalid attempts must not poison the next valid block.
+    BOOST_CHECK(!ledger.Apply(exit_block, invalid, 202,
+        {{StakeEventType::BOND, "B", stake}}, withdrawal_undo));
+
+    // Reaching the withdrawal height must be represented by contiguous blocks.
+    current = exit_block;
+    for (uint32_t height = 202; height <= 344; ++height) {
+        next.SetNull();
+        next.begin()[0] = 14;
+        next.begin()[1] = static_cast<unsigned char>(height);
+        HeightBlockUndo undo;
+        BOOST_REQUIRE(ledger.Apply(current, next, height, {}, undo));
+        current = next;
+    }
+    uint256 final_block; final_block.begin()[0] = 15;
+    HeightBlockUndo final_undo;
+    BOOST_REQUIRE(ledger.Apply(current, final_block, 345,
+        {{StakeEventType::WITHDRAW, "A", stake}}, final_undo));
+    BOOST_CHECK(!ledger.IsLocked(stake));
+    // A fabricated or inconsistent snapshot must not be accepted as undo.
+    HeightBlockUndo forged = final_undo;
+    forged.previous_claims.clear();
+    BOOST_CHECK(!ledger.Disconnect(forged));
+    BOOST_CHECK(ledger.Tip() == final_block);
+    forged = final_undo;
+    forged.previous_height = 100;
+    BOOST_CHECK(!ledger.Disconnect(forged));
+    BOOST_CHECK(ledger.Tip() == final_block);
+    BOOST_REQUIRE(ledger.Disconnect(final_undo));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(ledger.Tip() == current);
+    // Undo must restore the pending exit, allowing a different block at 345.
+    uint256 alt; alt.begin()[0] = 16;
+    HeightBlockUndo alternate_undo;
+    BOOST_REQUIRE(ledger.Apply(current, alt, 345, {}, alternate_undo));
+    BOOST_CHECK(ledger.IsLocked(stake));
+    BOOST_CHECK(ledger.CanWithdraw("A", 345));
+    BOOST_REQUIRE(ledger.Disconnect(alternate_undo));
+    BOOST_CHECK(ledger.Tip() == current);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_replay_atomicity)
+{
+    using namespace Consensus::Hybrid;
+    uint256 txid; txid.begin()[0] = 91;
+    const StakeOutpoint stake{txid, 0};
+    uint256 a; a.begin()[0] = 31;
+    uint256 last = a;
+    std::vector<HeightStakeReplayBlock> history{
+        {uint256{}, a, 100, {{StakeEventType::BOND, "A", stake}}}
+    };
+    // 100 confirmation blocks followed by the exit and unbonding interval.
+    for (uint32_t height = 101; height <= 345; ++height) {
+        uint256 block;
+        block.begin()[0] = 32;
+        block.begin()[1] = static_cast<unsigned char>(height);
+        const std::vector<StakeEvent> events = height == 201 ?
+            std::vector<StakeEvent>{{StakeEventType::EXIT, "A", stake}} :
+            (height == 345 ? std::vector<StakeEvent>{{StakeEventType::WITHDRAW, "A", stake}} :
+                             std::vector<StakeEvent>{});
+        history.push_back({last, block, height, events});
+        last = block;
+    }
+    HeightStakeLedger state;
+    BOOST_REQUIRE(ReplayHeightStakeBlocks(history, state));
+    BOOST_CHECK(state.Tip() == last);
+    BOOST_CHECK(!state.IsLocked(stake));
+
+    auto corrupt = history;
+    corrupt[3].height += 1; // Discontinuous block heights.
+    BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
+    BOOST_CHECK(state.Tip() == last);
+    BOOST_CHECK(!state.IsLocked(stake));
+
+    corrupt = history;
+    // Move the exit to height 202: a withdrawal at 345 is now too early.
+    corrupt[101].events.clear();
+    corrupt[102].events = {{StakeEventType::EXIT, "A", stake}};
+    BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
+    BOOST_CHECK(state.Tip() == last);
+
+    corrupt = history;
+    corrupt[2].parent.SetNull(); // Broken parent chain.
+    BOOST_CHECK(!ReplayHeightStakeBlocks(corrupt, state));
+    BOOST_CHECK(state.Tip() == last);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_spend_guard)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint256 txid; txid.begin()[0] = 104;
+    const StakeOutpoint stake{txid, 1};
+    uint256 a; a.begin()[0] = 105;
+    HeightBlockUndo bond_undo;
+    BOOST_REQUIRE(ledger.Apply(uint256{}, a, 100,
+        {{StakeEventType::BOND, "A", stake}}, bond_undo));
+
+    CMutableTransaction spending;
+    spending.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 0});
+    BOOST_CHECK(!SpendsHeightLockedStake(CTransaction(spending), ledger));
+    spending.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 1});
+    BOOST_CHECK(SpendsHeightLockedStake(CTransaction(spending), ledger));
+
+    uint256 parent = a;
+    for (uint32_t height = 101; height <= 200; ++height) {
+        uint256 block;
+        block.begin()[0] = 106;
+        block.begin()[1] = static_cast<unsigned char>(height);
+        HeightBlockUndo undo;
+        BOOST_REQUIRE(ledger.Apply(parent, block, height, {}, undo));
+        parent = block;
+    }
+    uint256 exit; exit.begin()[0] = 107;
+    HeightBlockUndo exit_undo;
+    BOOST_REQUIRE(ledger.Apply(parent, exit, 201,
+        {{StakeEventType::EXIT, "A", stake}}, exit_undo));
+    BOOST_CHECK(SpendsHeightLockedStake(CTransaction(spending), ledger));
+    BOOST_REQUIRE(ledger.Disconnect(exit_undo));
+    BOOST_CHECK(SpendsHeightLockedStake(CTransaction(spending), ledger));
+    BOOST_REQUIRE(ledger.Disconnect(bond_undo) == false); // Not the current tip.
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_block_spend_guard)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint256 stake_id; stake_id.begin()[0] = 111;
+    uint256 other_id; other_id.begin()[0] = 112;
+    const StakeOutpoint stake{stake_id, 0};
+    const StakeOutpoint other{other_id, 1};
+    CMutableTransaction spend;
+    spend.vin.emplace_back(COutPoint{Txid::FromUint256(stake_id), 0});
+    const std::vector<CTransactionRef> transactions{MakeTransactionRef(spend)};
+    BOOST_CHECK(!BlockSpendsBondedStake(transactions, {}, ledger));
+    BOOST_CHECK(BlockSpendsBondedStake(transactions,
+        {{StakeEventType::BOND, "A", stake}}, ledger));
+    BOOST_CHECK(!BlockSpendsBondedStake(transactions,
+        {{StakeEventType::BOND, "B", other}}, ledger));
+    BOOST_CHECK(BlockSpendsBondedStake({CTransactionRef{}}, {}, ledger));
+
+    uint256 block; block.begin()[0] = 113;
+    HeightBlockUndo undo;
+    BOOST_REQUIRE(ledger.Apply(uint256{}, block, 100,
+        {{StakeEventType::BOND, "A", stake}}, undo));
+    BOOST_CHECK(BlockSpendsBondedStake(transactions, {}, ledger));
+    BOOST_CHECK(BlockSpendsBondedStake(transactions,
+        {{StakeEventType::WITHDRAW, "A", stake}}, ledger));
+    BOOST_REQUIRE(ledger.Disconnect(undo));
+    BOOST_CHECK(!BlockSpendsBondedStake(transactions, {}, ledger));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_stake_envelope)
+{
+    using namespace Consensus::Hybrid;
+    StakeEnvelope original;
+    original.intent = StakeIntent::BOND;
+    original.outpoint.txid.begin()[0] = 0xab;
+    original.outpoint.txid.begin()[31] = 0xcd;
+    original.outpoint.vout = 0x12345678;
+    original.validator_id.begin()[0] = 0xef;
+
+    const CScript encoded = EncodeStakeEnvelope(original);
+    StakeEnvelope decoded;
+    BOOST_REQUIRE(DecodeStakeEnvelope(encoded, decoded));
+    BOOST_CHECK(decoded.intent == original.intent);
+    BOOST_CHECK(decoded.outpoint == original.outpoint);
+    BOOST_CHECK(decoded.validator_id == original.validator_id);
+
+    for (const StakeIntent intent : {StakeIntent::EXIT, StakeIntent::WITHDRAW}) {
+        original.intent = intent;
+        BOOST_REQUIRE(DecodeStakeEnvelope(EncodeStakeEnvelope(original), decoded));
+        BOOST_CHECK(decoded.intent == intent);
+    }
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_TRUE, decoded));
+
+    // A second opcode or alternate push encoding is not canonical.
+    const CScript trailing = EncodeStakeEnvelope(original) << OP_TRUE;
+    BOOST_CHECK(!DecodeStakeEnvelope(trailing, decoded));
+
+    // Wrong version, opcode or magic fail closed.
+    std::vector<unsigned char> payload;
+    opcodetype opcode;
+    CScript::const_iterator cursor = encoded.begin();
+    BOOST_REQUIRE(encoded.GetOp(cursor, opcode));
+    BOOST_REQUIRE(encoded.GetOp(cursor, opcode, payload));
+    payload[4] = 2;
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+    payload[4] = 1;
+    payload[5] = 4;
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+    payload[5] = 1;
+    payload[0] = 'X';
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+    payload[0] = 'C';
+    payload.pop_back();
+    BOOST_CHECK(!DecodeStakeEnvelope(CScript() << OP_RETURN << payload, decoded));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_transaction_intent_scan)
+{
+    using namespace Consensus::Hybrid;
+    StakeEnvelope event;
+    event.outpoint.txid.begin()[0] = 44;
+    event.outpoint.vout = 3;
+    event.validator_id.begin()[0] = 77;
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(event));
+    StakeEnvelope output;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::ONE);
+    BOOST_CHECK(output.outpoint == event.outpoint);
+    BOOST_CHECK(output.validator_id == event.validator_id);
+
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(event));
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
+    mtx.vout.pop_back();
+    mtx.vout[0].nValue = 1;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
+    mtx.vout[0].nValue = 0;
+    const CScript valid = mtx.vout[0].scriptPubKey;
+    CScript with_trailing_opcode = valid;
+    with_trailing_opcode << OP_TRUE;
+    mtx.vout[0].scriptPubKey = with_trailing_opcode;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::INVALID);
+
+    mtx.vout[0].scriptPubKey = CScript() << OP_RETURN <<
+        std::vector<unsigned char>{'N','O','T','S','T','A','K','E'};
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::NONE);
+    mtx.vout[0].scriptPubKey = valid;
+    BOOST_CHECK(ScanStakeIntent(CTransaction(mtx), output) == StakeIntentScanResult::ONE);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_parent_utxo_owner)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache cache(&base);
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pub = key.GetPubKey();
+    const uint160 owner = Hash160(pub);
+    StakeEnvelope intent;
+    intent.intent = StakeIntent::BOND;
+    intent.validator_id = owner;
+    intent.outpoint.txid.begin()[0] = 0xa1;
+    intent.outpoint.vout = 2;
+    const COutPoint outpoint{Txid::FromUint256(intent.outpoint.txid), intent.outpoint.vout};
+    CTxOut deposit;
+    deposit.nValue = 2000 * COIN;
+    deposit.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(owner.begin(), owner.end());
+    cache.AddCoin(outpoint, Coin(std::move(deposit), 100, false), false);
+    uint256 genesis; genesis.begin()[0] = 0x42;
+    uint256 nonce; nonce.begin()[0] = 0x54;
+    const auto digest = RegistrationDigest(genesis, pub, intent.outpoint.txid,
+        intent.outpoint.vout, 2000 * COIN, 200, nonce);
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(key.Sign(digest, signature));
+    BOOST_CHECK(VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 198, 199));
+    uint256 wrong = genesis;
+    wrong.begin()[0] ^= 0x01;
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        wrong, nonce, 199, 200));
+    intent.validator_id.begin()[0] ^= 0x01;
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
+    intent.validator_id = owner;
+    intent.intent = StakeIntent::EXIT;
+    BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_transaction_preflight)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache cache(&base);
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pub = key.GetPubKey();
+    StakeEnvelope intent;
+    intent.intent = StakeIntent::BOND;
+    intent.validator_id = Hash160(pub);
+    intent.outpoint.txid.begin()[0] = 0xb1;
+    intent.outpoint.vout = 1;
+    CTxOut utxo;
+    utxo.nValue = 2500 * COIN;
+    utxo.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(intent.validator_id.begin(), intent.validator_id.end());
+    cache.AddCoin(COutPoint{Txid::FromUint256(intent.outpoint.txid), 1},
+        Coin(std::move(utxo), 100, false), false);
+    uint256 genesis; genesis.begin()[0] = 0x42;
+    uint256 nonce; nonce.begin()[0] = 0x55;
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(key.Sign(RegistrationDigest(genesis, pub, intent.outpoint.txid,
+        intent.outpoint.vout, 2500 * COIN, 200, nonce), signature));
+
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    BOOST_CHECK(PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(intent.outpoint.txid), 1});
+    BOOST_CHECK(!PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+    mtx.vin.clear();
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    BOOST_CHECK(!PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+    mtx.vout.pop_back();
+    intent.intent = StakeIntent::EXIT;
+    mtx.vout[0].scriptPubKey = EncodeStakeEnvelope(intent);
+    BOOST_CHECK(!PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_embedded_bond_proof)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache view(&base);
+    CKey owner; owner.MakeNewKey(true);
+    const CPubKey pub = owner.GetPubKey();
+    StakeEnvelope intent;
+    intent.outpoint.txid.begin()[0] = 0xd1;
+    intent.outpoint.vout = 1;
+    intent.validator_id = Hash160(pub);
+    CTxOut deposit;
+    deposit.nValue = 3000 * COIN;
+    deposit.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(intent.validator_id.begin(), intent.validator_id.end());
+    view.AddCoin(COutPoint{Txid::FromUint256(intent.outpoint.txid), 1},
+                 Coin(std::move(deposit), 100, false), false);
+    uint256 genesis; genesis.begin()[0] = 0xd2;
+    uint256 nonce; nonce.begin()[0] = 0xd3;
+    StakeProofCarrier proof;
+    proof.owner = pub;
+    proof.nonce = nonce;
+    BOOST_REQUIRE(owner.Sign(RegistrationDigest(genesis, pub, intent.outpoint.txid,
+        1, 3000 * COIN, 200, nonce), proof.signature));
+    const CScript encoded = EncodeStakeProofCarrier(proof);
+    BOOST_REQUIRE(!encoded.empty());
+    StakeProofCarrier decoded;
+    BOOST_CHECK(DecodeStakeProofCarrier(encoded, decoded));
+    BOOST_CHECK(decoded.nonce == nonce);
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    mtx.vout.emplace_back(0, encoded);
+    BOOST_CHECK(PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, genesis, 199, 200));
+    mtx.vout.emplace_back(0, encoded);
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, genesis, 199, 200));
+    mtx.vout.pop_back();
+    mtx.vout[1].nValue = 1;
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, genesis, 199, 200));
+    mtx.vout[1].nValue = 0;
+    uint256 other_genesis = genesis;
+    other_genesis.begin()[0] ^= 1;
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, other_genesis, 199, 200));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_transaction_digest)
+{
+    using namespace Consensus::Hybrid;
+    CKey owner; owner.MakeNewKey(true);
+    const CPubKey pub = owner.GetPubKey();
+    StakeEnvelope intent;
+    intent.outpoint.txid.begin()[0] = 0xc1;
+    intent.validator_id = Hash160(pub);
+    uint256 genesis; genesis.begin()[0] = 0xc2;
+    uint256 nonce; nonce.begin()[0] = 0xc3;
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(intent.outpoint.txid), 2});
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    const auto digest = [&]() {
+        return BondTransactionDigest(CTransaction(mtx), intent, pub, genesis,
+            nonce, 2000 * COIN, 200);
+    };
+    const uint256 original = digest();
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(owner.Sign(original, signature));
+    BOOST_CHECK(pub.Verify(digest(), signature));
+    mtx.vin[0].nSequence -= 1;
+    BOOST_CHECK(digest() != original);
+    BOOST_CHECK(!pub.Verify(digest(), signature));
+    mtx.vin[0].nSequence += 1;
+    mtx.vout.emplace_back(1 * COIN, CScript() << OP_TRUE);
+    BOOST_CHECK(digest() != original);
+    mtx.vout.pop_back();
+    BOOST_CHECK(digest() == original);
+    uint256 foreign = genesis;
+    foreign.begin()[0] ^= 1;
+    BOOST_CHECK(BondTransactionDigest(CTransaction(mtx), intent, pub,
+        foreign, nonce, 2000 * COIN, 200) != original);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
