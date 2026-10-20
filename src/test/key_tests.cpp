@@ -18,6 +18,7 @@
 #include <consensus/hybrid_tx_intent.h>
 #include <consensus/hybrid_bond_auth.h>
 #include <consensus/hybrid_bond_preflight.h>
+#include <consensus/hybrid_tx_auth.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1241,6 +1242,42 @@ BOOST_AUTO_TEST_CASE(hybrid_embedded_bond_proof)
     other_genesis.begin()[0] ^= 1;
     BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
         view, other_genesis, 199, 200));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_transaction_digest)
+{
+    using namespace Consensus::Hybrid;
+    CKey owner; owner.MakeNewKey(true);
+    const CPubKey pub = owner.GetPubKey();
+    StakeEnvelope intent;
+    intent.outpoint.txid.begin()[0] = 0xc1;
+    intent.validator_id = Hash160(pub);
+    uint256 genesis; genesis.begin()[0] = 0xc2;
+    uint256 nonce; nonce.begin()[0] = 0xc3;
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(intent.outpoint.txid), 2});
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    const auto digest = [&]() {
+        return BondTransactionDigest(CTransaction(mtx), intent, pub, genesis,
+            nonce, 2000 * COIN, 200);
+    };
+    const uint256 original = digest();
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(owner.Sign(original, signature));
+    BOOST_CHECK(pub.Verify(digest(), signature));
+    mtx.vin[0].nSequence -= 1;
+    BOOST_CHECK(digest() != original);
+    BOOST_CHECK(!pub.Verify(digest(), signature));
+    mtx.vin[0].nSequence += 1;
+    mtx.vout.emplace_back(1 * COIN, CScript() << OP_TRUE);
+    BOOST_CHECK(digest() != original);
+    mtx.vout.pop_back();
+    BOOST_CHECK(digest() == original);
+    uint256 foreign = genesis;
+    foreign.begin()[0] ^= 1;
+    BOOST_CHECK(BondTransactionDigest(CTransaction(mtx), intent, pub,
+        foreign, nonce, 2000 * COIN, 200) != original);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
