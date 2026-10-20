@@ -17,6 +17,7 @@
 #include <consensus/hybrid_event_envelope.h>
 #include <consensus/hybrid_tx_intent.h>
 #include <consensus/hybrid_bond_auth.h>
+#include <consensus/hybrid_bond_preflight.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1146,6 +1147,50 @@ BOOST_AUTO_TEST_CASE(hybrid_bond_parent_utxo_owner)
     intent.validator_id = owner;
     intent.intent = StakeIntent::EXIT;
     BOOST_CHECK(!VerifyBondIntentOwner(cache, intent, pub, signature,
+        genesis, nonce, 199, 200));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_bond_transaction_preflight)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache cache(&base);
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pub = key.GetPubKey();
+    StakeEnvelope intent;
+    intent.intent = StakeIntent::BOND;
+    intent.validator_id = Hash160(pub);
+    intent.outpoint.txid.begin()[0] = 0xb1;
+    intent.outpoint.vout = 1;
+    CTxOut utxo;
+    utxo.nValue = 2500 * COIN;
+    utxo.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(intent.validator_id.begin(), intent.validator_id.end());
+    cache.AddCoin(COutPoint{Txid::FromUint256(intent.outpoint.txid), 1},
+        Coin(std::move(utxo), 100, false), false);
+    uint256 genesis; genesis.begin()[0] = 0x42;
+    uint256 nonce; nonce.begin()[0] = 0x55;
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(key.Sign(RegistrationDigest(genesis, pub, intent.outpoint.txid,
+        intent.outpoint.vout, 2500 * COIN, 200, nonce), signature));
+
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    BOOST_CHECK(PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(intent.outpoint.txid), 1});
+    BOOST_CHECK(!PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+    mtx.vin.clear();
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    BOOST_CHECK(!PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
+        genesis, nonce, 199, 200));
+    mtx.vout.pop_back();
+    intent.intent = StakeIntent::EXIT;
+    mtx.vout[0].scriptPubKey = EncodeStakeEnvelope(intent);
+    BOOST_CHECK(!PreflightBondTransaction(CTransaction(mtx), cache, pub, signature,
         genesis, nonce, 199, 200));
 }
 
