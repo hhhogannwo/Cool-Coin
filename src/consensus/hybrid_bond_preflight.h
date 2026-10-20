@@ -7,6 +7,7 @@
 
 #include <consensus/hybrid_bond_auth.h>
 #include <consensus/hybrid_tx_intent.h>
+#include <consensus/hybrid_proof_carrier.h>
 #include <primitives/transaction.h>
 
 namespace Consensus::Hybrid {
@@ -33,6 +34,22 @@ inline bool PreflightBondTransaction(
 
     return VerifyBondIntentOwner(parent_utxos, intent, owner_key, signature,
         chain_genesis, nonce, parent_height, candidate_height);
+}
+
+// Parse public key, nonce and signature from the transaction rather than
+// trusting a separate caller-supplied proof. This still must be invoked by
+// consensus against an authenticated parent UTXO view before it can enforce
+// anything on the network.
+inline bool PreflightEmbeddedBondTransaction(
+    const CTransaction& tx, const CCoinsView& parent_utxos,
+    const uint256& chain_genesis, uint32_t parent_height,
+    uint32_t candidate_height)
+{
+    StakeProofCarrier proof;
+    if (!ScanStakeProofCarrier(tx, proof)) return false;
+    return PreflightBondTransaction(tx, parent_utxos, proof.owner,
+        proof.signature, chain_genesis, proof.nonce, parent_height,
+        candidate_height);
 }
 
 } // namespace Consensus::Hybrid
