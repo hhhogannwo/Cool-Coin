@@ -1194,4 +1194,53 @@ BOOST_AUTO_TEST_CASE(hybrid_bond_transaction_preflight)
         genesis, nonce, 199, 200));
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_embedded_bond_proof)
+{
+    using namespace Consensus::Hybrid;
+    CCoinsView base;
+    CCoinsViewCache view(&base);
+    CKey owner; owner.MakeNewKey(true);
+    const CPubKey pub = owner.GetPubKey();
+    StakeEnvelope intent;
+    intent.outpoint.txid.begin()[0] = 0xd1;
+    intent.outpoint.vout = 1;
+    intent.validator_id = Hash160(pub);
+    CTxOut deposit;
+    deposit.nValue = 3000 * COIN;
+    deposit.scriptPubKey = CScript() << OP_0 <<
+        std::vector<unsigned char>(intent.validator_id.begin(), intent.validator_id.end());
+    view.AddCoin(COutPoint{Txid::FromUint256(intent.outpoint.txid), 1},
+                 Coin(std::move(deposit), 100, false), false);
+    uint256 genesis; genesis.begin()[0] = 0xd2;
+    uint256 nonce; nonce.begin()[0] = 0xd3;
+    StakeProofCarrier proof;
+    proof.owner = pub;
+    proof.nonce = nonce;
+    BOOST_REQUIRE(owner.Sign(RegistrationDigest(genesis, pub, intent.outpoint.txid,
+        1, 3000 * COIN, 200, nonce), proof.signature));
+    const CScript encoded = EncodeStakeProofCarrier(proof);
+    BOOST_REQUIRE(!encoded.empty());
+    StakeProofCarrier decoded;
+    BOOST_CHECK(DecodeStakeProofCarrier(encoded, decoded));
+    BOOST_CHECK(decoded.nonce == nonce);
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+    mtx.vout.emplace_back(0, encoded);
+    BOOST_CHECK(PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, genesis, 199, 200));
+    mtx.vout.emplace_back(0, encoded);
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, genesis, 199, 200));
+    mtx.vout.pop_back();
+    mtx.vout[1].nValue = 1;
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, genesis, 199, 200));
+    mtx.vout[1].nValue = 0;
+    uint256 other_genesis = genesis;
+    other_genesis.begin()[0] ^= 1;
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
+        view, other_genesis, 199, 200));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
