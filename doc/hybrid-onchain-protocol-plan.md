@@ -1,20 +1,20 @@
 # CoolCoin hybrid PoW/PoS: on-chain design blockers and proposed protocol
 
 **Status: DESIGN DRAFT ONLY. Do not deploy, activate, or modify mainnet.**
-Source branch: `feature/hybrid-pos-50000-design`.
-The 14 passing unit tests are *prototype* tests, not full consensus tests.
+Source integration branch: `feature/hybrid-pos-full-integration`.
+Existing unit tests are *prototype* tests, not full consensus tests. New tests on this branch have not yet been run.
 
 ## Constraints already chosen for prototype
 - Preserve the existing chain and existing balances.
 - Candidate hybrid activation: block 50,000, subject to final release validation.
-- Minimum stake: 1,000 COOL; maximum **effective** stake: 250,000 COOL per staking identity.
-- Candidate block subsidy split before halving: 48 COOL PoW + 16 COOL PoS.
+- Minimum stake: 1,000 COOL; maximum **effective** stake: 100,000 COOL per staking identity.
+- Candidate block subsidy split before halving: 32 COOL PoW + 32 COOL PoS.
 - Eligibility wait: 100 blocks in the height-aware ledger.
 - Exit wait: 144 blocks minimum.
 - SHA-256 PoW remains. Pool service on port 3333 is production infrastructure and
   MUST NOT be changed by experimental consensus work.
 
-## Mandatory on-chain representation (NOT implemented)
+## Mandatory on-chain representation (NOT integrated with consensus)
 
 **Bond**: choose a consensus-recognizable, consensus-enforced UTXO script and
 canonical registration payload. Both must be included in a validated transaction.
@@ -65,7 +65,7 @@ versioned on-chain format and transaction/script validation.
 - Whether PoS is a co-signer/attestation on SHA-256 blocks or alternates with
   PoW. This affects difficulty, fork choice, reorg finality, and attack security.
 - Where validator payout and state commitments are serialized, how they are
-  signed/verified, and how subsidy halving changes the 48/16 split.
+  signed/verified, and how subsidy halving changes the 32/32 split.
 - How to store stake state and its undo atomically with block UTXO changes.
 - Exact network upgrade schedule and compatibility rules.
 
@@ -81,3 +81,12 @@ versioned on-chain format and transaction/script validation.
   and authorization bypasses.
 - Only then discuss controlled public rollout; do not infer readiness from
   compiling 14 header-only prototype tests.
+
+## Integration branch progress (unverified)
+
+- Updated experimental effective-stake cap and base subsidy constants to 100,000 COOL and 32/32 COOL.
+- Added a deterministic height/halving-aware proposed subsidy schedule preserving historical pre-activation rewards.
+- Added a structural WITHDRAW preflight against the parent ledger, including exact locked-input matching and withdrawal maturity. **This does not authenticate the spending script or authorize funds by itself.**
+- Added unit-test cases for the proposed subsidy schedule and structural withdrawal preflight; tests have **not** been run.
+- **Not implemented:** authenticated EXIT proof, production `ConnectBlock`/`DisconnectBlock` stake state integration, atomic persistence, validator selection/attestations, miner payout creation, or full network activation.
+- Do not merge or deploy this branch until all consensus invariants and independent-node test gates pass.
