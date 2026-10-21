@@ -19,6 +19,8 @@
 #include <consensus/hybrid_bond_auth.h>
 #include <consensus/hybrid_bond_preflight.h>
 #include <consensus/hybrid_tx_auth.h>
+#include <consensus/hybrid_withdraw_preflight.h>
+#include <consensus/hybrid_subsidy_schedule.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1278,6 +1280,77 @@ BOOST_AUTO_TEST_CASE(hybrid_bond_transaction_digest)
     foreign.begin()[0] ^= 1;
     BOOST_CHECK(BondTransactionDigest(CTransaction(mtx), intent, pub,
         foreign, nonce, 2000 * COIN, 200) != original);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_proposed_subsidy_schedule)
+{
+    using namespace Consensus::Hybrid;
+    const auto before = ProposedSubsidySplit(ACTIVATION_HEIGHT - 1, 500000);
+    BOOST_CHECK(before.pow == 64 * COIN);
+    BOOST_CHECK(before.pos == 0);
+    const auto at = ProposedSubsidySplit(ACTIVATION_HEIGHT, 500000);
+    BOOST_CHECK(at.pow == 32 * COIN);
+    BOOST_CHECK(at.pos == 32 * COIN);
+    BOOST_CHECK(at.total == 64 * COIN);
+    const auto half = ProposedSubsidySplit(500000, 500000);
+    BOOST_CHECK(half.pow == 16 * COIN);
+    BOOST_CHECK(half.pos == 16 * COIN);
+    BOOST_CHECK(half.pow + half.pos == half.total);
+    BOOST_CHECK(ProposedSubsidySplit(-1, 500000).total == 0);
+    BOOST_CHECK(ProposedSubsidySplit(50000, 0).total == 0);
+    BOOST_CHECK(EffectiveStake(999 * COIN) == 0);
+    BOOST_CHECK(EffectiveStake(1000 * COIN) == 1000 * COIN);
+    BOOST_CHECK(EffectiveStake(800000 * COIN) == 100000 * COIN);
+}
+
+BOOST_AUTO_TEST_CASE(hybrid_withdraw_structure_preflight)
+{
+    using namespace Consensus::Hybrid;
+    HeightStakeLedger ledger;
+    uint160 validator;
+    validator.begin()[0] = 0x61;
+    const std::string id = validator.GetHex();
+    uint256 txid;
+    txid.begin()[0] = 0x62;
+    const StakeOutpoint stake{txid, 2};
+    uint256 parent;
+    uint256 block;
+    block.begin()[0] = 1;
+    HeightBlockUndo undo;
+    BOOST_REQUIRE(ledger.Apply(parent, block, 100,
+        {{StakeEventType::BOND, id, stake}}, undo));
+    parent = block;
+    for (uint32_t height = 101; height <= 200; ++height) {
+        block.SetNull();
+        block.begin()[0] = 2;
+        block.begin()[1] = static_cast<unsigned char>(height);
+        BOOST_REQUIRE(ledger.Apply(parent, block, height, {}, undo));
+        parent = block;
+    }
+    block.SetNull();
+    block.begin()[0] = 3;
+    BOOST_REQUIRE(ledger.Apply(parent, block, 201,
+        {{StakeEventType::EXIT, id, stake}}, undo));
+
+    StakeEnvelope envelope;
+    envelope.intent = StakeIntent::WITHDRAW;
+    envelope.outpoint = stake;
+    envelope.validator_id = validator;
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(txid), stake.vout});
+    tx.vout.emplace_back(0, EncodeStakeEnvelope(envelope));
+    BOOST_CHECK(!PreflightWithdrawalStructure(CTransaction(tx), ledger, 344));
+    BOOST_CHECK(PreflightWithdrawalStructure(CTransaction(tx), ledger, 345));
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(txid), stake.vout});
+    BOOST_CHECK(!PreflightWithdrawalStructure(CTransaction(tx), ledger, 345));
+    tx.vin.pop_back();
+    tx.vin[0].prevout.n = 1;
+    BOOST_CHECK(!PreflightWithdrawalStructure(CTransaction(tx), ledger, 345));
+    tx.vin[0].prevout.n = stake.vout;
+    envelope.intent = StakeIntent::EXIT;
+    tx.vout[0].scriptPubKey = EncodeStakeEnvelope(envelope);
+    BOOST_CHECK(!PreflightWithdrawalStructure(CTransaction(tx), ledger, 345));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
