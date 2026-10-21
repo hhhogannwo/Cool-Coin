@@ -31,8 +31,9 @@ inline StakeIntentScanResult ScanStakeIntent(const CTransaction& tx,
         std::vector<unsigned char> bytes;
         if (!script.GetOp(it, opcode) || opcode != OP_RETURN) continue;
         if (!script.GetOp(it, opcode, bytes)) continue;
-        // Strictly recognize the dedicated CSTK domain when it is carried
-        // as a direct push. Nonmatching OP_RETURN remains ordinary data.
+        // Recognize the dedicated CSTK domain regardless of push encoding.
+        // A noncanonical encoding must fail closed, not be treated as
+        // unrelated data. DecodeStakeEnvelope enforces canonical encoding.
         if (bytes.size() < 4 || bytes[0] != 'C' || bytes[1] != 'S' ||
             bytes[2] != 'T' || bytes[3] != 'K') continue;
         if (output.nValue != 0 || found || !DecodeStakeEnvelope(script, candidate))
