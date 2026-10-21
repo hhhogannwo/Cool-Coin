@@ -25,7 +25,7 @@ inline uint256 BondTransactionDigest(
     const uint256 base = RegistrationDigest(genesis, owner, intent.outpoint.txid,
         intent.outpoint.vout, amount, height, nonce);
     msg.insert(msg.end(), base.begin(), base.end());
-    AppendLE32(msg, static_cast<uint32_t>(tx.version));
+    AppendLE32(msg, static_cast<uint32_t>(tx.nVersion));
     AppendLE32(msg, tx.nLockTime);
     AppendLE32(msg, static_cast<uint32_t>(tx.vin.size()));
     for (const auto& input : tx.vin) {
