@@ -12,7 +12,7 @@ namespace Consensus::Hybrid {
 
 inline constexpr int ACTIVATION_HEIGHT = 50000;
 inline constexpr CAmount MINIMUM_STAKE = 1000 * COIN;
-inline constexpr CAmount MAXIMUM_EFFECTIVE_STAKE = 100000 * COIN;
+inline constexpr CAmount MAXIMUM_EFFECTIVE_STAKE = 250000 * COIN;
 
 // Amounts before the first halving only. A separate rule must enforce
 // reward allocation in the coinbase and validator payments at activation.
@@ -31,8 +31,8 @@ constexpr CAmount EffectiveStake(const CAmount committed_stake)
 
 static_assert(EffectiveStake(999 * COIN) == 0);
 static_assert(EffectiveStake(1000 * COIN) == 1000 * COIN);
-static_assert(EffectiveStake(100000 * COIN) == 100000 * COIN);
-static_assert(EffectiveStake(800000 * COIN) == 100000 * COIN);
+static_assert(EffectiveStake(250000 * COIN) == 250000 * COIN);
+static_assert(EffectiveStake(800000 * COIN) == 250000 * COIN);
 static_assert(TOTAL_SUBSIDY == 64 * COIN);
 
 } // namespace Consensus::Hybrid

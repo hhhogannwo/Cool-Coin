@@ -1301,7 +1301,7 @@ BOOST_AUTO_TEST_CASE(hybrid_proposed_subsidy_schedule)
     BOOST_CHECK(ProposedSubsidySplit(50000, 0).total == 0);
     BOOST_CHECK(EffectiveStake(999 * COIN) == 0);
     BOOST_CHECK(EffectiveStake(1000 * COIN) == 1000 * COIN);
-    BOOST_CHECK(EffectiveStake(800000 * COIN) == 100000 * COIN);
+    BOOST_CHECK(EffectiveStake(800000 * COIN) == 250000 * COIN);
 }
 
 BOOST_AUTO_TEST_CASE(hybrid_withdraw_structure_preflight)
