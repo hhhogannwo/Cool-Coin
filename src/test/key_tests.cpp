@@ -22,6 +22,7 @@
 #include <consensus/hybrid_withdraw_preflight.h>
 #include <consensus/hybrid_subsidy_schedule.h>
 #include <consensus/hybrid_reward_math.h>
+#include <consensus/hybrid_ledger_rewards.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1486,6 +1487,215 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_stake_boundaries)
             BOOST_CHECK(!ledger.IsLocked(stake));
         }
     }
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_ledger_reward_eligibility)
+{
+    using namespace Consensus::Hybrid;
+
+    HeightStakeLedger ledger;
+
+    uint256 txid;
+    txid.begin()[0] = 0x91;
+    const StakeOutpoint stake{txid, 0};
+
+    uint256 block;
+    block.begin()[0] = 0x92;
+
+    HeightBlockUndo undo;
+
+    BOOST_REQUIRE(ledger.Apply(
+        uint256{}, block, 100,
+        {{StakeEventType::BOND, "Alice", stake, 1000 * COIN}},
+        undo));
+
+    const auto pending = AllocateLedgerRewards(ledger);
+    BOOST_REQUIRE(pending.valid);
+    BOOST_CHECK(pending.validators.empty());
+    BOOST_CHECK_EQUAL(pending.distributed, 0);
+
+    uint256 parent = block;
+
+    for (uint32_t height = 101; height <= 200; ++height) {
+        block.SetNull();
+        block.begin()[0] = 0x93;
+        block.begin()[1] = static_cast<unsigned char>(height);
+
+        BOOST_REQUIRE(ledger.Apply(
+            parent, block, height, {}, undo));
+
+        parent = block;
+    }
+
+    const auto bonded = AllocateLedgerRewards(ledger);
+    BOOST_REQUIRE(bonded.valid);
+    BOOST_REQUIRE_EQUAL(bonded.validators.size(), 1U);
+    BOOST_CHECK_EQUAL(bonded.validators[0].reward, POS_SUBSIDY);
+    BOOST_CHECK_EQUAL(bonded.distributed, POS_SUBSIDY);
+
+    block.SetNull();
+    block.begin()[0] = 0x94;
+
+    BOOST_REQUIRE(ledger.Apply(
+        parent, block, 201,
+        {{StakeEventType::EXIT, "Alice", stake}},
+        undo));
+
+    const auto exiting = AllocateLedgerRewards(ledger);
+    BOOST_REQUIRE(exiting.valid);
+    BOOST_CHECK(exiting.validators.empty());
+    BOOST_CHECK_EQUAL(exiting.distributed, 0);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_ledger_multiple_validator_rewards)
+{
+    using namespace Consensus::Hybrid;
+
+    HeightStakeLedger ledger;
+
+    uint256 alice_tx;
+    alice_tx.begin()[0] = 0xA1;
+
+    uint256 bob_tx;
+    bob_tx.begin()[0] = 0xA2;
+
+    uint256 whale_tx;
+    whale_tx.begin()[0] = 0xA3;
+
+    uint256 block;
+    block.begin()[0] = 0xB1;
+
+    HeightBlockUndo undo;
+
+    BOOST_REQUIRE(ledger.Apply(
+        uint256{}, block, 100,
+        {
+            {StakeEventType::BOND, "Alice", {alice_tx, 0}, 1000 * COIN},
+            {StakeEventType::BOND, "Bob", {bob_tx, 0}, 3000 * COIN},
+            {StakeEventType::BOND, "Whale", {whale_tx, 0}, 800000 * COIN}
+        },
+        undo));
+
+    const auto pending = AllocateLedgerRewards(ledger);
+    BOOST_REQUIRE(pending.valid);
+    BOOST_CHECK(pending.validators.empty());
+    BOOST_CHECK_EQUAL(pending.undistributed, POS_SUBSIDY);
+
+    uint256 parent = block;
+
+    for (uint32_t height = 101; height <= 200; ++height) {
+        block.SetNull();
+        block.begin()[0] = 0xB2;
+        block.begin()[1] = static_cast<unsigned char>(height);
+
+        BOOST_REQUIRE(ledger.Apply(
+            parent, block, height, {}, undo));
+
+        parent = block;
+    }
+
+    const auto rewards = AllocateLedgerRewards(ledger);
+
+    BOOST_REQUIRE(rewards.valid);
+    BOOST_REQUIRE_EQUAL(rewards.validators.size(), 3U);
+
+    BOOST_CHECK_EQUAL(rewards.validators[0].validator, "Alice");
+    BOOST_CHECK_EQUAL(rewards.validators[1].validator, "Bob");
+    BOOST_CHECK_EQUAL(rewards.validators[2].validator, "Whale");
+
+    BOOST_CHECK_EQUAL(rewards.validators[0].effective, 1000 * COIN);
+    BOOST_CHECK_EQUAL(rewards.validators[1].effective, 3000 * COIN);
+    BOOST_CHECK_EQUAL(rewards.validators[2].effective, 250000 * COIN);
+
+    BOOST_CHECK_EQUAL(rewards.validators[2].committed, 800000 * COIN);
+
+    BOOST_CHECK_EQUAL(
+        rewards.distributed + rewards.undistributed,
+        POS_SUBSIDY);
+
+    BOOST_CHECK(rewards.validators[2].reward >
+                rewards.validators[1].reward);
+
+    BOOST_CHECK(rewards.validators[1].reward >
+                rewards.validators[0].reward);
+
+    BOOST_CHECK(rewards.distributed <= POS_SUBSIDY);
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_ledger_reward_redistribution_after_exit)
+{
+    using namespace Consensus::Hybrid;
+
+    HeightStakeLedger ledger;
+
+    uint256 alice_tx;
+    alice_tx.begin()[0] = 0xC1;
+
+    uint256 bob_tx;
+    bob_tx.begin()[0] = 0xC2;
+
+    const StakeOutpoint alice{alice_tx, 0};
+    const StakeOutpoint bob{bob_tx, 0};
+
+    uint256 block;
+    block.begin()[0] = 0xC3;
+
+    HeightBlockUndo undo;
+
+    BOOST_REQUIRE(ledger.Apply(
+        uint256{}, block, 100,
+        {
+            {StakeEventType::BOND, "Alice", alice, 1000 * COIN},
+            {StakeEventType::BOND, "Bob", bob, 3000 * COIN}
+        },
+        undo));
+
+    uint256 parent = block;
+
+    for (uint32_t height = 101; height <= 200; ++height) {
+        block.SetNull();
+        block.begin()[0] = 0xC4;
+        block.begin()[1] = static_cast<unsigned char>(height);
+
+        BOOST_REQUIRE(ledger.Apply(
+            parent, block, height, {}, undo));
+
+        parent = block;
+    }
+
+    const auto before = AllocateLedgerRewards(ledger);
+
+    BOOST_REQUIRE(before.valid);
+    BOOST_REQUIRE_EQUAL(before.validators.size(), 2U);
+
+    BOOST_CHECK_EQUAL(before.validators[0].validator, "Alice");
+    BOOST_CHECK_EQUAL(before.validators[1].validator, "Bob");
+
+    BOOST_CHECK_EQUAL(before.validators[0].reward, 8 * COIN);
+    BOOST_CHECK_EQUAL(before.validators[1].reward, 24 * COIN);
+    BOOST_CHECK_EQUAL(before.distributed, POS_SUBSIDY);
+    BOOST_CHECK_EQUAL(before.undistributed, 0);
+
+    block.SetNull();
+    block.begin()[0] = 0xC5;
+
+    BOOST_REQUIRE(ledger.Apply(
+        parent, block, 201,
+        {{StakeEventType::EXIT, "Bob", bob}},
+        undo));
+
+    const auto after = AllocateLedgerRewards(ledger);
+
+    BOOST_REQUIRE(after.valid);
+    BOOST_REQUIRE_EQUAL(after.validators.size(), 1U);
+
+    BOOST_CHECK_EQUAL(after.validators[0].validator, "Alice");
+    BOOST_CHECK_EQUAL(after.validators[0].reward, POS_SUBSIDY);
+    BOOST_CHECK_EQUAL(after.distributed, POS_SUBSIDY);
+    BOOST_CHECK_EQUAL(after.undistributed, 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
