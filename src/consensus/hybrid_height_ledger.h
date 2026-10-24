@@ -20,6 +20,7 @@ struct HeightBond {
     BondPhase phase{BondPhase::PENDING};
     uint32_t eligible_height{0};
     uint32_t withdraw_height{0};
+    CAmount committed{0};
 };
 struct HeightBlockUndo {
     uint256 previous_tip;
@@ -45,10 +46,13 @@ public:
             auto it = bonds.find(event.validator);
             switch (event.type) {
             case StakeEventType::BOND:
-                if (it != bonds.end() || claims.count(event.outpoint) ||
+                if (event.committed < MINIMUM_STAKE ||
+                    event.committed > MAX_MONEY ||
+                    it != bonds.end() || claims.count(event.outpoint) ||
                     height > UINT32_MAX - PROPOSED_MIN_CONFIRMATIONS) return false;
                 bonds.emplace(event.validator, HeightBond{event.outpoint, BondPhase::PENDING,
                     height + PROPOSED_MIN_CONFIRMATIONS, 0});
+                bonds.at(event.validator).committed = event.committed;
                 claims.insert(event.outpoint);
                 break;
             case StakeEventType::EXIT:

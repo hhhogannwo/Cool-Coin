@@ -40,7 +40,7 @@ inline RewardAllocation AllocateRewards(const std::vector<CAmount>& committed, C
 
     unsigned __int128 total_weight{0};
     for (const CAmount amount : committed) {
-        if (amount < 0) return RewardAllocation{};
+        if (amount < 0 || amount > MAX_MONEY) return RewardAllocation{};
         const CAmount weight = EffectiveStake(amount);
         result.entries.push_back({amount, weight, 0});
         total_weight += static_cast<uint64_t>(weight);

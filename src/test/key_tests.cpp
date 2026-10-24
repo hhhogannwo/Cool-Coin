@@ -21,6 +21,7 @@
 #include <consensus/hybrid_tx_auth.h>
 #include <consensus/hybrid_withdraw_preflight.h>
 #include <consensus/hybrid_subsidy_schedule.h>
+#include <consensus/hybrid_reward_math.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -681,15 +682,15 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_block_undo)
     uint256 third; third.begin()[0] = 3;
     StakeBlockUndo undo1, undo2;
     BOOST_REQUIRE(state.ApplyBlock(uint256{}, first,
-        {{StakeEventType::BOND, "A", stake}}, undo1));
+        {{StakeEventType::BOND, "A", stake, 1000 * COIN}}, undo1));
     BOOST_CHECK(state.IsBonded("A"));
     BOOST_CHECK(state.IsClaimed(stake));
     BOOST_CHECK(!state.ApplyBlock(first, second,
-        {{StakeEventType::BOND, "B", stake}}, undo2));
+        {{StakeEventType::BOND, "B", stake, 1000 * COIN}}, undo2));
     BOOST_CHECK(state.Tip() == first);
     BOOST_CHECK(!state.ApplyBlock(first, second,
         {{StakeEventType::EXIT, "A", stake},
-         {StakeEventType::BOND, "B", stake}}, undo2));
+         {StakeEventType::BOND, "B", stake, 1000 * COIN}}, undo2));
     BOOST_CHECK(state.IsBonded("A"));
     BOOST_REQUIRE(state.ApplyBlock(first, second,
         {{StakeEventType::EXIT, "A", stake}}, undo2));
@@ -731,7 +732,7 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_replay)
     uint256 b; b.begin()[0] = 12;
     uint256 c; c.begin()[0] = 13;
     const std::vector<StakeReplayBlock> history{
-        {uint256{}, a, {{StakeEventType::BOND, "A", stake}}},
+        {uint256{}, a, {{StakeEventType::BOND, "A", stake, 1000 * COIN}}},
         {a, b, {{StakeEventType::EXIT, "A", stake}}},
         {b, c, {{StakeEventType::WITHDRAW, "A", stake}}}
     };
@@ -744,7 +745,7 @@ BOOST_AUTO_TEST_CASE(hybrid_stake_replay)
     BOOST_CHECK(reconstructed.Tip() == before_restart.Tip());
     BOOST_CHECK(!reconstructed.IsClaimed(stake));
     const std::vector<StakeReplayBlock> bad_history{
-        {uint256{}, a, {{StakeEventType::BOND, "A", stake}}},
+        {uint256{}, a, {{StakeEventType::BOND, "A", stake, 1000 * COIN}}},
         {c, b, {{StakeEventType::EXIT, "A", stake}}}
     };
     BOOST_CHECK(!ReplayStakeBlocks(bad_history, reconstructed));
@@ -797,7 +798,7 @@ BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
     StakeStateUndoPrototype state;
     StakeBlockUndo undo_a, undo_b, undo_alt;
     BOOST_REQUIRE(state.ApplyBlock(uint256{}, a,
-        {{StakeEventType::BOND, "Alice", one}}, undo_a));
+        {{StakeEventType::BOND, "Alice", one, 1000 * COIN}}, undo_a));
     BOOST_CHECK(state.Tip() == a);
     BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(only_alice));
 
@@ -813,7 +814,7 @@ BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
     BOOST_CHECK(StakeStateCommitment(state.Records()) == StakeStateCommitment(only_alice));
 
     BOOST_REQUIRE(state.ApplyBlock(a, alternate,
-        {{StakeEventType::BOND, "Bob", two}}, undo_alt));
+        {{StakeEventType::BOND, "Bob", two, 1000 * COIN}}, undo_alt));
     BOOST_CHECK(state.Tip() == alternate);
     BOOST_CHECK(state.IsBonded("Alice"));
     BOOST_CHECK(state.IsBonded("Bob"));
@@ -823,8 +824,8 @@ BOOST_AUTO_TEST_CASE(hybrid_state_commitment_reorg)
     // Reconstruct the competing branch from a fresh empty state.
     StakeStateUndoPrototype rebuilt;
     BOOST_REQUIRE(ReplayStakeBlocks({
-        {uint256{}, a, {{StakeEventType::BOND, "Alice", one}}},
-        {a, alternate, {{StakeEventType::BOND, "Bob", two}}}
+        {uint256{}, a, {{StakeEventType::BOND, "Alice", one, 1000 * COIN}}},
+        {a, alternate, {{StakeEventType::BOND, "Bob", two, 1000 * COIN}}}
     }, rebuilt));
     BOOST_CHECK(rebuilt.Tip() == state.Tip());
     BOOST_CHECK(StakeStateCommitment(rebuilt.Records()) == StakeStateCommitment(state.Records()));
@@ -842,7 +843,7 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
     uint256 current; current.begin()[0] = 10;
     HeightBlockUndo bond_undo;
     BOOST_REQUIRE(ledger.Apply(uint256{}, current, 100,
-        {{StakeEventType::BOND, "A", stake}}, bond_undo));
+        {{StakeEventType::BOND, "A", stake, 1000 * COIN}}, bond_undo));
     BOOST_CHECK(ledger.IsLocked(stake));
     BOOST_CHECK(!ledger.IsBonded("A"));
     BOOST_CHECK(!ledger.Apply(current, txid, 102, {}, bond_undo));
@@ -874,7 +875,7 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_withdrawal)
     BOOST_CHECK(ledger.IsLocked(stake));
     // Invalid attempts must not poison the next valid block.
     BOOST_CHECK(!ledger.Apply(exit_block, invalid, 202,
-        {{StakeEventType::BOND, "B", stake}}, withdrawal_undo));
+        {{StakeEventType::BOND, "B", stake, 1000 * COIN}}, withdrawal_undo));
 
     // Reaching the withdrawal height must be represented by contiguous blocks.
     current = exit_block;
@@ -922,7 +923,7 @@ BOOST_AUTO_TEST_CASE(hybrid_height_replay_atomicity)
     uint256 a; a.begin()[0] = 31;
     uint256 last = a;
     std::vector<HeightStakeReplayBlock> history{
-        {uint256{}, a, 100, {{StakeEventType::BOND, "A", stake}}}
+        {uint256{}, a, 100, {{StakeEventType::BOND, "A", stake, 1000 * COIN}}}
     };
     // 100 confirmation blocks followed by the exit and unbonding interval.
     for (uint32_t height = 101; height <= 345; ++height) {
@@ -970,7 +971,7 @@ BOOST_AUTO_TEST_CASE(hybrid_height_spend_guard)
     uint256 a; a.begin()[0] = 105;
     HeightBlockUndo bond_undo;
     BOOST_REQUIRE(ledger.Apply(uint256{}, a, 100,
-        {{StakeEventType::BOND, "A", stake}}, bond_undo));
+        {{StakeEventType::BOND, "A", stake, 1000 * COIN}}, bond_undo));
 
     CMutableTransaction spending;
     spending.vin.emplace_back(COutPoint{Txid::FromUint256(txid), 0});
@@ -1011,7 +1012,7 @@ BOOST_AUTO_TEST_CASE(hybrid_block_spend_guard)
     const std::vector<CTransactionRef> transactions{MakeTransactionRef(spend)};
     BOOST_CHECK(!BlockSpendsBondedStake(transactions, {}, ledger));
     BOOST_CHECK(BlockSpendsBondedStake(transactions,
-        {{StakeEventType::BOND, "A", stake}}, ledger));
+        {{StakeEventType::BOND, "A", stake, 1000 * COIN}}, ledger));
     BOOST_CHECK(!BlockSpendsBondedStake(transactions,
         {{StakeEventType::BOND, "B", other}}, ledger));
     BOOST_CHECK(BlockSpendsBondedStake({CTransactionRef{}}, {}, ledger));
@@ -1019,7 +1020,7 @@ BOOST_AUTO_TEST_CASE(hybrid_block_spend_guard)
     uint256 block; block.begin()[0] = 113;
     HeightBlockUndo undo;
     BOOST_REQUIRE(ledger.Apply(uint256{}, block, 100,
-        {{StakeEventType::BOND, "A", stake}}, undo));
+        {{StakeEventType::BOND, "A", stake, 1000 * COIN}}, undo));
     BOOST_CHECK(BlockSpendsBondedStake(transactions, {}, ledger));
     BOOST_CHECK(BlockSpendsBondedStake(transactions,
         {{StakeEventType::WITHDRAW, "A", stake}}, ledger));
@@ -1304,6 +1305,52 @@ BOOST_AUTO_TEST_CASE(hybrid_proposed_subsidy_schedule)
     BOOST_CHECK(EffectiveStake(800000 * COIN) == 250000 * COIN);
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_proportional_staking_rewards)
+{
+    using namespace Consensus::Hybrid;
+
+    const auto none = AllocateRewards({});
+    BOOST_REQUIRE(none.valid);
+    BOOST_CHECK_EQUAL(none.distributed, 0);
+    BOOST_CHECK_EQUAL(none.undistributed, 32 * COIN);
+
+    const auto equal = AllocateRewards({1000 * COIN, 1000 * COIN});
+    BOOST_REQUIRE(equal.valid);
+    BOOST_REQUIRE_EQUAL(equal.entries.size(), 2U);
+    BOOST_CHECK_EQUAL(equal.entries[0].reward, 16 * COIN);
+    BOOST_CHECK_EQUAL(equal.entries[1].reward, 16 * COIN);
+
+    const auto weighted = AllocateRewards({1000 * COIN, 3000 * COIN});
+    BOOST_REQUIRE(weighted.valid);
+    BOOST_REQUIRE_EQUAL(weighted.entries.size(), 2U);
+    BOOST_CHECK_EQUAL(weighted.entries[0].reward, 8 * COIN);
+    BOOST_CHECK_EQUAL(weighted.entries[1].reward, 24 * COIN);
+
+    const auto minimum = AllocateRewards({999 * COIN, 1000 * COIN});
+    BOOST_REQUIRE(minimum.valid);
+    BOOST_REQUIRE_EQUAL(minimum.entries.size(), 2U);
+    BOOST_CHECK_EQUAL(minimum.entries[0].reward, 0);
+    BOOST_CHECK_EQUAL(minimum.entries[1].reward, 32 * COIN);
+
+    const auto capped = AllocateRewards({800000 * COIN, 250000 * COIN});
+    BOOST_REQUIRE(capped.valid);
+    BOOST_REQUIRE_EQUAL(capped.entries.size(), 2U);
+    BOOST_CHECK_EQUAL(capped.entries[0].effective_stake, 250000 * COIN);
+    BOOST_CHECK_EQUAL(capped.entries[0].reward, 16 * COIN);
+    BOOST_CHECK_EQUAL(capped.entries[1].reward, 16 * COIN);
+
+    const auto rounded = AllocateRewards({1000 * COIN, 1000 * COIN}, 1);
+    BOOST_REQUIRE(rounded.valid);
+    BOOST_CHECK_EQUAL(rounded.distributed, 0);
+    BOOST_CHECK_EQUAL(rounded.undistributed, 1);
+
+    BOOST_CHECK(!AllocateRewards({-1}).valid);
+    BOOST_CHECK(!AllocateRewards({MAX_MONEY + 1}).valid);
+    BOOST_CHECK(!AllocateRewards({1000 * COIN}, -1).valid);
+    BOOST_CHECK(!AllocateRewards({1000 * COIN}, TOTAL_SUBSIDY + 1).valid);
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_withdraw_structure_preflight)
 {
     using namespace Consensus::Hybrid;
@@ -1319,7 +1366,7 @@ BOOST_AUTO_TEST_CASE(hybrid_withdraw_structure_preflight)
     block.begin()[0] = 1;
     HeightBlockUndo undo;
     BOOST_REQUIRE(ledger.Apply(parent, block, 100,
-        {{StakeEventType::BOND, id, stake}}, undo));
+        {{StakeEventType::BOND, id, stake, 1000 * COIN}}, undo));
     parent = block;
     for (uint32_t height = 101; height <= 200; ++height) {
         block.SetNull();
@@ -1351,6 +1398,94 @@ BOOST_AUTO_TEST_CASE(hybrid_withdraw_structure_preflight)
     envelope.intent = StakeIntent::EXIT;
     tx.vout[0].scriptPubKey = EncodeStakeEnvelope(envelope);
     BOOST_CHECK(!PreflightWithdrawalStructure(CTransaction(tx), ledger, 345));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_ledger_committed_amount)
+{
+    using namespace Consensus::Hybrid;
+
+    HeightStakeLedger ledger;
+
+    uint256 txid;
+    txid.begin()[0] = 0x71;
+    const StakeOutpoint stake{txid, 0};
+
+    uint256 block;
+    block.begin()[0] = 0x72;
+
+    HeightBlockUndo undo;
+
+    BOOST_REQUIRE(ledger.Apply(
+        uint256{}, block, 100,
+        {{StakeEventType::BOND, "Alice", stake, 800000 * COIN}},
+        undo));
+
+    const auto& records = ledger.Records();
+    const auto it = records.find("Alice");
+
+    BOOST_REQUIRE(it != records.end());
+    BOOST_CHECK_EQUAL(it->second.committed, 800000 * COIN);
+    BOOST_CHECK_EQUAL(EffectiveStake(it->second.committed), 250000 * COIN);
+
+    BOOST_REQUIRE(ledger.Disconnect(undo));
+    BOOST_CHECK(ledger.Records().empty());
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_height_ledger_stake_boundaries)
+{
+    using namespace Consensus::Hybrid;
+
+    const CAmount amounts[] = {
+        0,
+        999 * COIN,
+        1000 * COIN,
+        250000 * COIN,
+        800000 * COIN,
+        MAX_MONEY + 1
+    };
+
+    const bool accepted[] = {
+        false, false, true, true, true, false
+    };
+
+    for (size_t i = 0; i < 6; ++i) {
+        HeightStakeLedger ledger;
+
+        uint256 txid;
+        txid.begin()[0] = static_cast<unsigned char>(i + 1);
+
+        const StakeOutpoint stake{txid, 0};
+
+        uint256 block;
+        block.begin()[0] = static_cast<unsigned char>(i + 20);
+
+        HeightBlockUndo undo;
+
+        const bool result = ledger.Apply(
+            uint256{}, block, 100,
+            {{StakeEventType::BOND, "Alice", stake, amounts[i]}},
+            undo);
+
+        BOOST_CHECK_EQUAL(result, accepted[i]);
+
+        if (accepted[i]) {
+            BOOST_CHECK(ledger.IsLocked(stake));
+            BOOST_CHECK_EQUAL(
+                ledger.Records().at("Alice").committed,
+                amounts[i]);
+            BOOST_CHECK_EQUAL(
+                EffectiveStake(amounts[i]),
+                amounts[i] > MAXIMUM_EFFECTIVE_STAKE
+                    ? MAXIMUM_EFFECTIVE_STAKE
+                    : amounts[i]);
+        } else {
+            BOOST_CHECK(ledger.Records().empty());
+            BOOST_CHECK(ledger.Tip().IsNull());
+            BOOST_CHECK(!ledger.IsLocked(stake));
+        }
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

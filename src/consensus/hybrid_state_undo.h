@@ -19,6 +19,7 @@ struct StakeEvent {
     StakeEventType type;
     std::string validator;
     StakeOutpoint outpoint;
+    CAmount committed{0};
 };
 
 struct StakeStateRecord {
