@@ -29,7 +29,8 @@ struct LedgerRewardAllocation {
 };
 
 inline LedgerRewardAllocation AllocateLedgerRewards(
-    const HeightStakeLedger& ledger)
+    const HeightStakeLedger& ledger,
+    CAmount pos_budget = POS_SUBSIDY)
 {
     LedgerRewardAllocation result;
     std::vector<CAmount> committed;
@@ -42,7 +43,7 @@ inline LedgerRewardAllocation AllocateLedgerRewards(
         committed.push_back(bond.committed);
     }
 
-    const auto allocation = AllocateRewards(committed, POS_SUBSIDY);
+    const auto allocation = AllocateRewards(committed, pos_budget);
 
     if (!allocation.valid) return result;
 

@@ -1347,6 +1347,45 @@ BOOST_AUTO_TEST_CASE(hybrid_proposed_subsidy_schedule)
 }
 
 
+BOOST_AUTO_TEST_CASE(hybrid_halving_aware_validator_rewards)
+{
+    using namespace Consensus::Hybrid;
+
+    constexpr int halving_interval = 500000;
+
+    const auto before = ProposedSubsidySplit(49999, halving_interval);
+    BOOST_CHECK_EQUAL(before.pos, 0);
+
+    const auto activation = ProposedSubsidySplit(50000, halving_interval);
+    BOOST_CHECK_EQUAL(activation.pos, 32 * COIN);
+
+    const auto pre_halving = ProposedSubsidySplit(499999, halving_interval);
+    BOOST_CHECK_EQUAL(pre_halving.pos, 32 * COIN);
+
+    const auto first_halving = ProposedSubsidySplit(500000, halving_interval);
+    BOOST_CHECK_EQUAL(first_halving.pos, 16 * COIN);
+
+    const auto second_halving = ProposedSubsidySplit(1000000, halving_interval);
+    BOOST_CHECK_EQUAL(second_halving.pos, 8 * COIN);
+
+    for (const auto budget : {
+             activation.pos,
+             first_halving.pos,
+             second_halving.pos}) {
+        const auto rewards = AllocateRewards(
+            {1000 * COIN, 1000 * COIN}, budget);
+
+        BOOST_REQUIRE(rewards.valid);
+        BOOST_REQUIRE_EQUAL(rewards.entries.size(), 2U);
+
+        BOOST_CHECK_EQUAL(rewards.entries[0].reward, budget / 2);
+        BOOST_CHECK_EQUAL(rewards.entries[1].reward, budget / 2);
+        BOOST_CHECK_EQUAL(
+            rewards.distributed + rewards.undistributed,
+            budget);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_proportional_staking_rewards)
 {
     using namespace Consensus::Hybrid;
@@ -1529,6 +1568,59 @@ BOOST_AUTO_TEST_CASE(hybrid_height_ledger_stake_boundaries)
     }
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_ledger_halving_rewards)
+{
+    using namespace Consensus::Hybrid;
+
+    HeightStakeLedger ledger;
+
+    uint256 alice_tx;
+    alice_tx.begin()[0] = 0xD1;
+
+    uint256 bob_tx;
+    bob_tx.begin()[0] = 0xD2;
+
+    uint256 block;
+    block.begin()[0] = 0xD3;
+
+    HeightBlockUndo undo;
+
+    BOOST_REQUIRE(ledger.Apply(
+        uint256{}, block, 100,
+        {
+            {StakeEventType::BOND, "Alice", {alice_tx, 0}, 1000 * COIN},
+            {StakeEventType::BOND, "Bob", {bob_tx, 0}, 1000 * COIN}
+        },
+        undo));
+
+    uint256 parent = block;
+
+    for (uint32_t height = 101; height <= 200; ++height) {
+        block.SetNull();
+        block.begin()[0] = 0xD4;
+        block.begin()[1] = static_cast<unsigned char>(height);
+
+        BOOST_REQUIRE(ledger.Apply(
+            parent, block, height, {}, undo));
+
+        parent = block;
+    }
+
+    for (const int height : {50000, 500000, 1000000}) {
+        const auto split = ProposedSubsidySplit(height, 500000);
+        const auto rewards = AllocateLedgerRewards(ledger, split.pos);
+
+        BOOST_REQUIRE(rewards.valid);
+        BOOST_REQUIRE_EQUAL(rewards.validators.size(), 2U);
+
+        BOOST_CHECK_EQUAL(rewards.validators[0].reward, split.pos / 2);
+        BOOST_CHECK_EQUAL(rewards.validators[1].reward, split.pos / 2);
+
+        BOOST_CHECK_EQUAL(rewards.distributed, split.pos);
+        BOOST_CHECK_EQUAL(rewards.undistributed, 0);
+    }
+}
 
 BOOST_AUTO_TEST_CASE(hybrid_ledger_reward_eligibility)
 {
