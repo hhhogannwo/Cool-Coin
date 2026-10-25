@@ -6,6 +6,7 @@
 
 #include <consensus/hybrid_auth.h>
 #include <consensus/hybrid_event_envelope.h>
+#include <consensus/hybrid_proof_carrier.h>
 #include <primitives/transaction.h>
 #include <hash.h>
 
@@ -46,5 +47,45 @@ inline uint256 BondTransactionDigest(
     }
     return Hash(msg);
 }
+
+// Construct the transaction-bound authorization digest while excluding
+// exactly one canonical CSPF proof carrier to avoid circular signing.
+// The caller must independently reject duplicate or malformed carriers.
+inline bool EmbeddedBondTransactionDigest(
+    const CTransaction& tx,
+    const StakeEnvelope& intent,
+    const CPubKey& owner,
+    const uint256& genesis,
+    const uint256& nonce,
+    CAmount amount,
+    uint32_t height,
+    uint256& digest)
+{
+    CMutableTransaction unsigned_tx(tx);
+    size_t carrier_count = 0;
+
+    for (size_t i = 0; i < unsigned_tx.vout.size();) {
+        StakeProofCarrier candidate;
+        if (DecodeStakeProofCarrier(
+                unsigned_tx.vout[i].scriptPubKey, candidate)) {
+            if (unsigned_tx.vout[i].nValue != 0)
+                return false;
+            ++carrier_count;
+            unsigned_tx.vout.erase(unsigned_tx.vout.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+
+    if (carrier_count != 1)
+        return false;
+
+    digest = BondTransactionDigest(
+        CTransaction(unsigned_tx), intent, owner,
+        genesis, nonce, amount, height);
+
+    return true;
+}
+
 } // namespace Consensus::Hybrid
 #endif

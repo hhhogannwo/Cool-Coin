@@ -43,5 +43,43 @@ inline bool VerifyBondIntentOwner(const CCoinsView& view,
     return VerifyP2WPKHRegistration(coin.out, key, digest, signature);
 }
 
+
+// Experimental verification against a caller-supplied transaction-bound digest.
+// The caller must construct this digest from the authenticated transaction,
+// excluding its canonical proof carrier.
+inline bool VerifyBondIntentOwnerDigest(
+    const CCoinsView& view,
+    const StakeEnvelope& intent,
+    const CPubKey& key,
+    const std::vector<unsigned char>& signature,
+    const uint256& digest,
+    uint32_t tip_height,
+    uint32_t registration_height)
+{
+    if (intent.intent != StakeIntent::BOND ||
+        !key.IsFullyValid() || !key.IsCompressed() ||
+        intent.validator_id != Hash160(key) ||
+        tip_height == UINT32_MAX ||
+        registration_height != tip_height + 1) return false;
+
+    const auto evidence = InspectStakeOutpoint(
+        view, intent.outpoint, tip_height);
+
+    if (!evidence.unspent ||
+        evidence.confirmations < PROPOSED_MIN_CONFIRMATIONS)
+        return false;
+
+    Coin coin;
+    const COutPoint outpoint(
+        Txid::FromUint256(intent.outpoint.txid),
+        intent.outpoint.vout);
+
+    if (!view.GetCoin(outpoint, coin) || coin.IsSpent())
+        return false;
+
+    return VerifyP2WPKHRegistration(
+        coin.out, key, digest, signature);
+}
+
 } // namespace Consensus::Hybrid
 #endif

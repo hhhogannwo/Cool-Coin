@@ -8,6 +8,7 @@
 #include <consensus/hybrid_bond_auth.h>
 #include <consensus/hybrid_tx_intent.h>
 #include <consensus/hybrid_proof_carrier.h>
+#include <consensus/hybrid_tx_auth.h>
 #include <primitives/transaction.h>
 
 namespace Consensus::Hybrid {
@@ -47,9 +48,33 @@ inline bool PreflightEmbeddedBondTransaction(
 {
     StakeProofCarrier proof;
     if (!ScanStakeProofCarrier(tx, proof)) return false;
-    return PreflightBondTransaction(tx, parent_utxos, proof.owner,
-        proof.signature, chain_genesis, proof.nonce, parent_height,
-        candidate_height);
+
+    StakeEnvelope intent;
+    if (ScanStakeIntent(tx, intent) != StakeIntentScanResult::ONE ||
+        intent.intent != StakeIntent::BOND) return false;
+
+    // A bond cannot register an outpoint spent by this transaction.
+    for (const CTxIn& input : tx.vin) {
+        if (input.prevout.hash.ToUint256() == intent.outpoint.txid &&
+            input.prevout.n == intent.outpoint.vout) return false;
+    }
+
+    const auto evidence = InspectStakeOutpoint(
+        parent_utxos, intent.outpoint, parent_height);
+
+    if (!evidence.unspent ||
+        evidence.confirmations < PROPOSED_MIN_CONFIRMATIONS)
+        return false;
+
+    uint256 digest;
+    if (!EmbeddedBondTransactionDigest(
+            tx, intent, proof.owner, chain_genesis, proof.nonce,
+            evidence.amount, candidate_height, digest))
+        return false;
+
+    return VerifyBondIntentOwnerDigest(
+        parent_utxos, intent, proof.owner, proof.signature,
+        digest, parent_height, candidate_height);
 }
 
 } // namespace Consensus::Hybrid

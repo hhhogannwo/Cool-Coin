@@ -1222,18 +1222,58 @@ BOOST_AUTO_TEST_CASE(hybrid_embedded_bond_proof)
     StakeProofCarrier proof;
     proof.owner = pub;
     proof.nonce = nonce;
-    BOOST_REQUIRE(owner.Sign(RegistrationDigest(genesis, pub, intent.outpoint.txid,
-        1, 3000 * COIN, 200, nonce), proof.signature));
+    // Sign the transaction without its proof carrier to avoid circular signing.
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+
+    const uint256 digest = BondTransactionDigest(
+        CTransaction(mtx), intent, pub, genesis, nonce,
+        3000 * COIN, 200);
+
+    BOOST_REQUIRE(owner.Sign(digest, proof.signature));
+
     const CScript encoded = EncodeStakeProofCarrier(proof);
     BOOST_REQUIRE(!encoded.empty());
+
     StakeProofCarrier decoded;
     BOOST_CHECK(DecodeStakeProofCarrier(encoded, decoded));
     BOOST_CHECK(decoded.nonce == nonce);
-    CMutableTransaction mtx;
-    mtx.vout.emplace_back(0, EncodeStakeEnvelope(intent));
+
     mtx.vout.emplace_back(0, encoded);
     BOOST_CHECK(PreflightEmbeddedBondTransaction(CTransaction(mtx),
         view, genesis, 199, 200));
+    // SECURITY REGRESSION: modifying transaction inputs must
+    // invalidate the original embedded authorization.
+    CMutableTransaction altered_input = mtx;
+
+    uint256 unrelated_txid;
+    unrelated_txid.begin()[0] = 0xee;
+
+    altered_input.vin.emplace_back(
+        COutPoint{Txid::FromUint256(unrelated_txid), 0});
+
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(
+        CTransaction(altered_input),
+        view, genesis, 199, 200));
+
+
+    // SECURITY REGRESSION: a copied proof must not authorize a
+    // different transaction with the same bond registration details.
+    CMutableTransaction transplanted = mtx;
+    transplanted.nLockTime = 12345;
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(transplanted),
+        view, genesis, 199, 200));
+
+    // SECURITY REGRESSION: changing a non-proof output must
+    // invalidate the original transaction-bound authorization.
+    CMutableTransaction altered_output = mtx;
+    altered_output.vout.emplace_back(
+        1 * COIN, CScript() << OP_TRUE);
+
+    BOOST_CHECK(!PreflightEmbeddedBondTransaction(
+        CTransaction(altered_output),
+        view, genesis, 199, 200));
+
     mtx.vout.emplace_back(0, encoded);
     BOOST_CHECK(!PreflightEmbeddedBondTransaction(CTransaction(mtx),
         view, genesis, 199, 200));
