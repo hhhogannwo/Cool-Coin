@@ -28,15 +28,18 @@ struct ValidatorPaymentPlan {
 };
 
 inline ValidatorPaymentPlan BuildValidatorPaymentPlan(
-    const LedgerRewardAllocation& allocation)
+    const LedgerRewardAllocation& allocation,
+    CAmount pos_budget = POS_SUBSIDY)
 {
     ValidatorPaymentPlan result;
 
     if (!allocation.valid ||
+        pos_budget < 0 ||
+        pos_budget > POS_SUBSIDY ||
         allocation.distributed < 0 ||
         allocation.undistributed < 0 ||
-        allocation.distributed > POS_SUBSIDY ||
-        allocation.undistributed > POS_SUBSIDY - allocation.distributed) {
+        allocation.distributed > pos_budget ||
+        allocation.undistributed != pos_budget - allocation.distributed) {
         return result;
     }
 

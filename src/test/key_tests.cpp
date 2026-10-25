@@ -1414,6 +1414,70 @@ BOOST_AUTO_TEST_CASE(hybrid_validator_payout_script)
     BOOST_CHECK(rejected.empty());
 }
 
+BOOST_AUTO_TEST_CASE(hybrid_validator_payment_halving_budgets)
+{
+    using namespace Consensus::Hybrid;
+
+    uint160 alice;
+    alice.begin()[0] = 0x41;
+
+    uint160 bob;
+    bob.begin()[0] = 0x42;
+
+    LedgerRewardAllocation allocation;
+    allocation.valid = true;
+
+    for (const CAmount budget : {
+             32 * COIN, 16 * COIN, 8 * COIN}) {
+
+        allocation.distributed = budget;
+        allocation.undistributed = 0;
+
+        allocation.validators = {
+            {alice.GetHex(), 1000 * COIN, 1000 * COIN, budget / 2},
+            {bob.GetHex(), 1000 * COIN, 1000 * COIN, budget / 2}
+        };
+
+        const auto plan = BuildValidatorPaymentPlan(
+            allocation, budget);
+
+        BOOST_REQUIRE(plan.valid);
+        BOOST_REQUIRE_EQUAL(plan.payments.size(), 2U);
+        BOOST_CHECK_EQUAL(plan.distributed, budget);
+        BOOST_CHECK_EQUAL(plan.undistributed, 0);
+
+        BOOST_CHECK_EQUAL(plan.payments[0].amount, budget / 2);
+        BOOST_CHECK_EQUAL(plan.payments[1].amount, budget / 2);
+
+        // The allocation cannot claim a larger budget.
+        BOOST_CHECK(!BuildValidatorPaymentPlan(
+            allocation, budget / 2).valid);
+
+        // The allocation must account for the entire budget.
+        allocation.undistributed = 1;
+        BOOST_CHECK(!BuildValidatorPaymentPlan(
+            allocation, budget).valid);
+    }
+
+    BOOST_CHECK(!BuildValidatorPaymentPlan(
+        allocation, -1).valid);
+
+    BOOST_CHECK(!BuildValidatorPaymentPlan(
+        allocation, 33 * COIN).valid);
+
+    // No eligible validators: the entire budget remains unpaid.
+    allocation.validators.clear();
+    allocation.distributed = 0;
+    allocation.undistributed = 8 * COIN;
+
+    const auto empty = BuildValidatorPaymentPlan(
+        allocation, 8 * COIN);
+
+    BOOST_REQUIRE(empty.valid);
+    BOOST_CHECK(empty.payments.empty());
+    BOOST_CHECK_EQUAL(empty.undistributed, 8 * COIN);
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_validator_payment_security)
 {
     using namespace Consensus::Hybrid;
