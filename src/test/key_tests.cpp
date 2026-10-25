@@ -23,6 +23,7 @@
 #include <consensus/hybrid_subsidy_schedule.h>
 #include <consensus/hybrid_reward_math.h>
 #include <consensus/hybrid_ledger_rewards.h>
+#include <consensus/hybrid_reward_payments.h>
 #include <consensus/hybrid_validator_payout.h>
 
 #include <common/system.h>
@@ -1411,6 +1412,57 @@ BOOST_AUTO_TEST_CASE(hybrid_validator_payout_script)
     BOOST_CHECK(!ValidatorPayoutScript(std::string(40, 'A'), rejected));
 
     BOOST_CHECK(rejected.empty());
+}
+
+BOOST_AUTO_TEST_CASE(hybrid_validator_reward_payments)
+{
+    using namespace Consensus::Hybrid;
+
+    uint160 alice;
+    alice.begin()[0] = 0x11;
+
+    uint160 bob;
+    bob.begin()[0] = 0x22;
+
+    LedgerRewardAllocation allocation;
+    allocation.valid = true;
+    allocation.distributed = 32 * COIN;
+    allocation.undistributed = 0;
+
+    allocation.validators = {
+        {alice.GetHex(), 1000 * COIN, 1000 * COIN, 8 * COIN},
+        {bob.GetHex(), 3000 * COIN, 3000 * COIN, 24 * COIN}
+    };
+
+    const auto plan = BuildValidatorPaymentPlan(allocation);
+
+    BOOST_REQUIRE(plan.valid);
+    BOOST_REQUIRE_EQUAL(plan.payments.size(), 2U);
+    BOOST_CHECK_EQUAL(plan.payments[0].amount, 8 * COIN);
+    BOOST_CHECK_EQUAL(plan.payments[1].amount, 24 * COIN);
+    BOOST_CHECK_EQUAL(plan.distributed, 32 * COIN);
+
+    CScript alice_script;
+    BOOST_REQUIRE(ValidatorPayoutScript(alice.GetHex(), alice_script));
+    BOOST_CHECK(plan.payments[0].script == alice_script);
+
+    allocation.validators[1].validator = "Bob";
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.validators[1].validator = bob.GetHex();
+    allocation.validators[1].reward = 0;
+    allocation.distributed = 8 * COIN;
+    allocation.undistributed = 24 * COIN;
+
+    const auto zero = BuildValidatorPaymentPlan(allocation);
+    BOOST_REQUIRE(zero.valid);
+    BOOST_REQUIRE_EQUAL(zero.payments.size(), 1U);
+
+    allocation.distributed = 32 * COIN;
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.valid = false;
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
 }
 
 BOOST_AUTO_TEST_CASE(hybrid_proportional_staking_rewards)
