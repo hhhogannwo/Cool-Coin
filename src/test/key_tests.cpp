@@ -1518,12 +1518,12 @@ BOOST_AUTO_TEST_CASE(hybrid_coinbase_payout_verification)
     }
 
     BOOST_CHECK(VerifyValidatorCoinbasePayments(
-        CTransaction(coinbase), plan));
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
 
     // A missing validator output must fail.
     coinbase.vout.pop_back();
     BOOST_CHECK(!VerifyValidatorCoinbasePayments(
-        CTransaction(coinbase), plan));
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
 
     // Restore the second validator payment.
     coinbase.vout.resize(3);
@@ -1533,7 +1533,7 @@ BOOST_AUTO_TEST_CASE(hybrid_coinbase_payout_verification)
     // Incorrect reward amount must fail.
     coinbase.vout[2].nValue -= 1;
     BOOST_CHECK(!VerifyValidatorCoinbasePayments(
-        CTransaction(coinbase), plan));
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
 
     coinbase.vout[2].nValue += 1;
 
@@ -1542,12 +1542,46 @@ BOOST_AUTO_TEST_CASE(hybrid_coinbase_payout_verification)
     duplicate.payments[1] = duplicate.payments[0];
 
     BOOST_CHECK(!VerifyValidatorCoinbasePayments(
-        CTransaction(coinbase), duplicate));
+        CTransaction(coinbase), duplicate, 32 * COIN, 32 * COIN, 0));
+
+    // Miner cannot claim more than the PoW budget.
+    coinbase.vout[0].nValue += 1;
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
+    coinbase.vout[0].nValue -= 1;
+
+    // Duplicate validator output must fail.
+    coinbase.vout.push_back(coinbase.vout[1]);
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
+    coinbase.vout.pop_back();
+
+    // Extra miner output cannot exceed the total PoW budget.
+    coinbase.vout.push_back(coinbase.vout[0]);
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
+    coinbase.vout.pop_back();
+
+    // A negative output must fail.
+    coinbase.vout[0].nValue = -1;
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
+    coinbase.vout[0].nValue = 32 * COIN;
+
+    // Invalid subsidy budgets must fail.
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, 33 * COIN, 32 * COIN, 0));
+
+    // A valid transaction fee may increase the miner reward.
+    coinbase.vout[0].nValue += 1;
+    BOOST_CHECK(VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 1));
+    coinbase.vout[0].nValue -= 1;
 
     // A non-coinbase transaction must fail.
     coinbase.vin[0].prevout.n = 0;
     BOOST_CHECK(!VerifyValidatorCoinbasePayments(
-        CTransaction(coinbase), plan));
+        CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
 }
 
 BOOST_AUTO_TEST_CASE(hybrid_validator_payment_security)
