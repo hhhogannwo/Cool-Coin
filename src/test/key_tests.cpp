@@ -1414,6 +1414,61 @@ BOOST_AUTO_TEST_CASE(hybrid_validator_payout_script)
     BOOST_CHECK(rejected.empty());
 }
 
+BOOST_AUTO_TEST_CASE(hybrid_validator_payment_security)
+{
+    using namespace Consensus::Hybrid;
+
+    uint160 alice;
+    alice.begin()[0] = 0x31;
+
+    uint160 bob;
+    bob.begin()[0] = 0x32;
+
+    LedgerRewardAllocation allocation;
+    allocation.valid = true;
+    allocation.distributed = 32 * COIN;
+    allocation.undistributed = 0;
+
+    allocation.validators = {
+        {alice.GetHex(), 1000 * COIN, 1000 * COIN, 16 * COIN},
+        {bob.GetHex(), 1000 * COIN, 1000 * COIN, 16 * COIN}
+    };
+
+    BOOST_CHECK(BuildValidatorPaymentPlan(allocation).valid);
+
+    // Duplicate validator identities must be rejected.
+    allocation.validators[1].validator = alice.GetHex();
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.validators[1].validator = bob.GetHex();
+
+    // Distributed rewards cannot exceed the PoS budget.
+    allocation.distributed = 33 * COIN;
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.distributed = 32 * COIN;
+
+    // Distributed plus undistributed cannot exceed the budget.
+    allocation.undistributed = COIN;
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.undistributed = 0;
+
+    // Negative undistributed amounts are invalid.
+    allocation.undistributed = -1;
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.undistributed = 0;
+
+    // Negative validator rewards must be rejected.
+    allocation.validators[0].reward = -1;
+    BOOST_CHECK(!BuildValidatorPaymentPlan(allocation).valid);
+
+    allocation.validators[0].reward = 16 * COIN;
+
+    BOOST_CHECK(BuildValidatorPaymentPlan(allocation).valid);
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_validator_reward_payments)
 {
     using namespace Consensus::Hybrid;

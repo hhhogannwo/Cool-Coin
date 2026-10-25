@@ -10,6 +10,7 @@
 
 #include <script/script.h>
 
+#include <set>
 #include <vector>
 
 namespace Consensus::Hybrid {
@@ -33,11 +34,14 @@ inline ValidatorPaymentPlan BuildValidatorPaymentPlan(
 
     if (!allocation.valid ||
         allocation.distributed < 0 ||
-        allocation.undistributed < 0) {
+        allocation.undistributed < 0 ||
+        allocation.distributed > POS_SUBSIDY ||
+        allocation.undistributed > POS_SUBSIDY - allocation.distributed) {
         return result;
     }
 
     CAmount total{0};
+    std::set<std::string> seen_validators;
 
     for (const auto& validator : allocation.validators) {
         if (validator.reward < 0 ||
@@ -48,7 +52,8 @@ inline ValidatorPaymentPlan BuildValidatorPaymentPlan(
 
         CScript script;
 
-        if (!ValidatorPayoutScript(validator.validator, script)) {
+        if (!ValidatorPayoutScript(validator.validator, script) ||
+            !seen_validators.insert(validator.validator).second) {
             return ValidatorPaymentPlan{};
         }
 
