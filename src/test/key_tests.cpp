@@ -23,6 +23,7 @@
 #include <consensus/hybrid_subsidy_schedule.h>
 #include <consensus/hybrid_reward_math.h>
 #include <consensus/hybrid_ledger_rewards.h>
+#include <consensus/hybrid_validator_payout.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1384,6 +1385,32 @@ BOOST_AUTO_TEST_CASE(hybrid_halving_aware_validator_rewards)
             rewards.distributed + rewards.undistributed,
             budget);
     }
+}
+
+BOOST_AUTO_TEST_CASE(hybrid_validator_payout_script)
+{
+    using namespace Consensus::Hybrid;
+
+    uint160 validator;
+    validator.begin()[0] = 0x42;
+
+    const std::string id = validator.GetHex();
+
+    CScript payout;
+    BOOST_REQUIRE(ValidatorPayoutScript(id, payout));
+
+    const CScript expected = CScript() << OP_0 <<
+        std::vector<unsigned char>(validator.begin(), validator.end());
+
+    BOOST_CHECK(payout == expected);
+
+    CScript rejected;
+    BOOST_CHECK(!ValidatorPayoutScript("Alice", rejected));
+    BOOST_CHECK(!ValidatorPayoutScript("", rejected));
+    BOOST_CHECK(!ValidatorPayoutScript(std::string(40, 'g'), rejected));
+    BOOST_CHECK(!ValidatorPayoutScript(std::string(40, 'A'), rejected));
+
+    BOOST_CHECK(rejected.empty());
 }
 
 BOOST_AUTO_TEST_CASE(hybrid_proportional_staking_rewards)
