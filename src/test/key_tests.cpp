@@ -25,6 +25,7 @@
 #include <consensus/hybrid_ledger_rewards.h>
 #include <consensus/hybrid_reward_payments.h>
 #include <consensus/hybrid_validator_payout.h>
+#include <consensus/hybrid_coinbase_payouts.h>
 
 #include <common/system.h>
 #include <key_io.h>
@@ -1476,6 +1477,77 @@ BOOST_AUTO_TEST_CASE(hybrid_validator_payment_halving_budgets)
     BOOST_REQUIRE(empty.valid);
     BOOST_CHECK(empty.payments.empty());
     BOOST_CHECK_EQUAL(empty.undistributed, 8 * COIN);
+}
+
+BOOST_AUTO_TEST_CASE(hybrid_coinbase_payout_verification)
+{
+    using namespace Consensus::Hybrid;
+
+    uint160 alice;
+    alice.begin()[0] = 0x51;
+
+    uint160 bob;
+    bob.begin()[0] = 0x52;
+
+    LedgerRewardAllocation allocation;
+    allocation.valid = true;
+    allocation.distributed = 32 * COIN;
+    allocation.undistributed = 0;
+
+    allocation.validators = {
+        {alice.GetHex(), 1000 * COIN, 1000 * COIN, 16 * COIN},
+        {bob.GetHex(), 1000 * COIN, 1000 * COIN, 16 * COIN}
+    };
+
+    const auto plan = BuildValidatorPaymentPlan(allocation);
+
+    BOOST_REQUIRE(plan.valid);
+    BOOST_REQUIRE_EQUAL(plan.payments.size(), 2U);
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+
+    coinbase.vout.resize(3);
+    coinbase.vout[0].nValue = 32 * COIN;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+    for (size_t i = 0; i < plan.payments.size(); ++i) {
+        coinbase.vout[i + 1].nValue = plan.payments[i].amount;
+        coinbase.vout[i + 1].scriptPubKey = plan.payments[i].script;
+    }
+
+    BOOST_CHECK(VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan));
+
+    // A missing validator output must fail.
+    coinbase.vout.pop_back();
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan));
+
+    // Restore the second validator payment.
+    coinbase.vout.resize(3);
+    coinbase.vout[2].nValue = plan.payments[1].amount;
+    coinbase.vout[2].scriptPubKey = plan.payments[1].script;
+
+    // Incorrect reward amount must fail.
+    coinbase.vout[2].nValue -= 1;
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan));
+
+    coinbase.vout[2].nValue += 1;
+
+    // One output cannot satisfy two expected payments.
+    ValidatorPaymentPlan duplicate = plan;
+    duplicate.payments[1] = duplicate.payments[0];
+
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), duplicate));
+
+    // A non-coinbase transaction must fail.
+    coinbase.vin[0].prevout.n = 0;
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan));
 }
 
 BOOST_AUTO_TEST_CASE(hybrid_validator_payment_security)
