@@ -1735,6 +1735,28 @@ BOOST_AUTO_TEST_CASE(hybrid_proportional_staking_rewards)
     BOOST_CHECK(!AllocateRewards({1000 * COIN}, TOTAL_SUBSIDY + 1).valid);
 }
 
+BOOST_AUTO_TEST_CASE(hybrid_three_validator_rounding)
+{
+    using namespace Consensus::Hybrid;
+
+    const auto allocation = AllocateRewards(
+        {1000 * COIN, 1000 * COIN, 1000 * COIN},
+        32 * COIN);
+
+    BOOST_REQUIRE(allocation.valid);
+    BOOST_REQUIRE_EQUAL(allocation.entries.size(), 3U);
+
+    for (const auto& entry : allocation.entries) {
+        BOOST_CHECK_EQUAL(entry.reward, 1066666666);
+    }
+
+    BOOST_CHECK_EQUAL(allocation.distributed, 3199999998);
+    BOOST_CHECK_EQUAL(allocation.undistributed, 2);
+    BOOST_CHECK_EQUAL(
+        allocation.distributed + allocation.undistributed,
+        32 * COIN);
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_withdraw_structure_preflight)
 {
     using namespace Consensus::Hybrid;
