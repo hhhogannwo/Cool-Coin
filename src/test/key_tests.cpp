@@ -1584,6 +1584,66 @@ BOOST_AUTO_TEST_CASE(hybrid_coinbase_payout_verification)
         CTransaction(coinbase), plan, 32 * COIN, 32 * COIN, 0));
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_activation_coinbase_payouts)
+{
+    using namespace Consensus::Hybrid;
+
+    const auto before = ProposedSubsidySplit(49999, 500000);
+    const auto active = ProposedSubsidySplit(50000, 500000);
+
+    BOOST_CHECK_EQUAL(before.pow, 64 * COIN);
+    BOOST_CHECK_EQUAL(before.pos, 0);
+    BOOST_REQUIRE_EQUAL(active.pow, 32 * COIN);
+    BOOST_REQUIRE_EQUAL(active.pos, 32 * COIN);
+
+    uint160 alice;
+    alice.begin()[0] = 0x61;
+
+    uint160 bob;
+    bob.begin()[0] = 0x62;
+
+    LedgerRewardAllocation allocation;
+    allocation.valid = true;
+    allocation.distributed = active.pos;
+    allocation.undistributed = 0;
+    allocation.validators = {
+        {alice.GetHex(), 1000 * COIN, 1000 * COIN, 16 * COIN},
+        {bob.GetHex(), 1000 * COIN, 1000 * COIN, 16 * COIN}
+    };
+
+    const auto plan = BuildValidatorPaymentPlan(allocation, active.pos);
+    BOOST_REQUIRE(plan.valid);
+    BOOST_REQUIRE_EQUAL(plan.payments.size(), 2U);
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(3);
+
+    coinbase.vout[0].nValue = active.pow;
+    coinbase.vout[0].scriptPubKey = CScript() << OP_TRUE;
+
+    for (size_t i = 0; i < plan.payments.size(); ++i) {
+        coinbase.vout[i + 1].nValue = plan.payments[i].amount;
+        coinbase.vout[i + 1].scriptPubKey = plan.payments[i].script;
+    }
+
+    BOOST_CHECK(VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, active.pow, active.pos, 0));
+
+    // The miner cannot claim the validator subsidy.
+    coinbase.vout[0].nValue += 1;
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, active.pow, active.pos, 0));
+    coinbase.vout[0].nValue -= 1;
+
+    // A validator cannot claim an extra satoshi.
+    coinbase.vout[1].nValue += 1;
+    BOOST_CHECK(!VerifyValidatorCoinbasePayments(
+        CTransaction(coinbase), plan, active.pow, active.pos, 0));
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_validator_payment_security)
 {
     using namespace Consensus::Hybrid;
