@@ -1948,6 +1948,35 @@ BOOST_AUTO_TEST_CASE(hybrid_ledger_halving_rewards)
     }
 }
 
+
+BOOST_AUTO_TEST_CASE(hybrid_regtest_activation_override)
+{
+    using namespace Consensus::Hybrid;
+
+    constexpr int regtest_halving = 150;
+    constexpr int regtest_activation = 100;
+
+    const auto before = ProposedSubsidySplit(99, regtest_halving, regtest_activation);
+    BOOST_CHECK_EQUAL(before.pow, 64 * COIN);
+    BOOST_CHECK_EQUAL(before.pos, 0);
+    BOOST_CHECK_EQUAL(before.total, 64 * COIN);
+
+    const auto active = ProposedSubsidySplit(100, regtest_halving, regtest_activation);
+    BOOST_CHECK_EQUAL(active.pow, 32 * COIN);
+    BOOST_CHECK_EQUAL(active.pos, 32 * COIN);
+    BOOST_CHECK_EQUAL(active.total, 64 * COIN);
+
+    const auto halved = ProposedSubsidySplit(150, regtest_halving, regtest_activation);
+    BOOST_CHECK_EQUAL(halved.pow, 16 * COIN);
+    BOOST_CHECK_EQUAL(halved.pos, 16 * COIN);
+    BOOST_CHECK_EQUAL(halved.total, 32 * COIN);
+
+    const auto mainnet_default = ProposedSubsidySplit(100, 500000);
+    BOOST_CHECK_EQUAL(mainnet_default.pow, 64 * COIN);
+    BOOST_CHECK_EQUAL(mainnet_default.pos, 0);
+    BOOST_CHECK_EQUAL(mainnet_default.total, 64 * COIN);
+}
+
 BOOST_AUTO_TEST_CASE(hybrid_ledger_reward_eligibility)
 {
     using namespace Consensus::Hybrid;

@@ -18,13 +18,13 @@ struct SubsidySplit {
 // The historical subsidy must remain unchanged. Post-activation halvings
 // follow the chain's configured halving interval, not a hardcoded 210000.
 // At most 64 right shifts are permitted for 64-bit monetary arithmetic.
-inline SubsidySplit ProposedSubsidySplit(int height, int halving_interval)
+inline SubsidySplit ProposedSubsidySplit(int height, int halving_interval, int activation_height = ACTIVATION_HEIGHT)
 {
     if (height < 0 || halving_interval <= 0) return {};
     const int halvings = height / halving_interval;
     if (halvings >= 64) return {};
     const CAmount total = (64 * COIN) >> halvings;
-    if (height < ACTIVATION_HEIGHT) return {total, 0, total};
+    if (height < activation_height) return {total, 0, total};
     // Exact conservation for odd satoshi values: the remainder is assigned
     // to PoW. No rounding may inflate the combined subsidy.
     const CAmount pos = total / 2;
