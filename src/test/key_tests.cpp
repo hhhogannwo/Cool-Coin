@@ -17,6 +17,7 @@
 #include <consensus/hybrid_event_envelope.h>
 #include <consensus/hybrid_tx_intent.h>
 #include <consensus/hybrid_bond_auth.h>
+#include <consensus/hybrid_exit_auth.h>
 #include <consensus/hybrid_bond_preflight.h>
 #include <consensus/hybrid_tx_auth.h>
 #include <consensus/hybrid_withdraw_preflight.h>
@@ -1642,6 +1643,96 @@ BOOST_AUTO_TEST_CASE(hybrid_activation_coinbase_payouts)
     coinbase.vout[1].nValue += 1;
     BOOST_CHECK(!VerifyValidatorCoinbasePayments(
         CTransaction(coinbase), plan, active.pow, active.pos, 0));
+}
+
+
+BOOST_AUTO_TEST_CASE(hybrid_exit_authorization_security)
+{
+    using namespace Consensus::Hybrid;
+
+    CKey owner;
+    owner.MakeNewKey(true);
+
+    CKey attacker;
+    attacker.MakeNewKey(true);
+
+    const CPubKey owner_pubkey = owner.GetPubKey();
+    const CPubKey attacker_pubkey = attacker.GetPubKey();
+
+    uint256 genesis;
+    genesis.begin()[0] = 0x11;
+
+    uint256 tx_hash;
+    tx_hash.begin()[0] = 0x22;
+
+    uint256 stake_txid;
+    stake_txid.begin()[0] = 0x33;
+
+    uint256 nonce;
+    nonce.begin()[0] = 0x44;
+
+    const StakeOutpoint stake{stake_txid, 0};
+    const std::string validator = "validator-alice";
+    constexpr uint32_t exit_height = 50100;
+
+    const uint256 digest = ExitAuthorizationDigest(
+        genesis, tx_hash, validator, stake, exit_height, nonce);
+
+    std::vector<unsigned char> signature;
+    BOOST_REQUIRE(owner.Sign(digest, signature));
+
+    BOOST_CHECK(VerifyExitAuthorizationSignature(
+        owner_pubkey, digest, signature));
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        attacker_pubkey, digest, signature));
+
+    uint256 other_genesis = genesis;
+    other_genesis.begin()[0] ^= 1;
+
+    uint256 other_tx = tx_hash;
+    other_tx.begin()[0] ^= 1;
+
+    uint256 other_nonce = nonce;
+    other_nonce.begin()[0] ^= 1;
+
+    const StakeOutpoint other_stake{stake_txid, 1};
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        owner_pubkey,
+        ExitAuthorizationDigest(
+            other_genesis, tx_hash, validator, stake, exit_height, nonce),
+        signature));
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        owner_pubkey,
+        ExitAuthorizationDigest(
+            genesis, other_tx, validator, stake, exit_height, nonce),
+        signature));
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        owner_pubkey,
+        ExitAuthorizationDigest(
+            genesis, tx_hash, "validator-bob", stake, exit_height, nonce),
+        signature));
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        owner_pubkey,
+        ExitAuthorizationDigest(
+            genesis, tx_hash, validator, other_stake, exit_height, nonce),
+        signature));
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        owner_pubkey,
+        ExitAuthorizationDigest(
+            genesis, tx_hash, validator, stake, exit_height + 1, nonce),
+        signature));
+
+    BOOST_CHECK(!VerifyExitAuthorizationSignature(
+        owner_pubkey,
+        ExitAuthorizationDigest(
+            genesis, tx_hash, validator, stake, exit_height, other_nonce),
+        signature));
 }
 
 BOOST_AUTO_TEST_CASE(hybrid_validator_payment_security)
